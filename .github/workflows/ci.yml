@@ -1,0 +1,44 @@
+# Testes a cada push na main e em todo PR, compilando NO WINDOWS de verdade
+# (o código Windows do app só é testado de fato aqui).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Dependências do front
+        run: npm ci
+
+      - name: Front (TypeScript + Vite)
+        run: npm run build
+
+      - name: Testes do backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Clippy (avisos de boas práticas, não bloqueia)
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
+        continue-on-error: true
