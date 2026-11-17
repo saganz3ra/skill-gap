@@ -125,6 +125,12 @@ pub trait GameSys: Sys {
     fn service_running(&self, name: &str) -> Option<bool>;
     fn pause_service(&self, name: &str) -> AppResult<()>;
     fn resume_service(&self, name: &str) -> AppResult<()>;
+    /// Caminho do executável SEM abrir o processo. `None` = não deu pra ler.
+    fn image_path(&self, _pid: u32) -> Option<String> {
+        None
+    }
+    /// Segura (true) ou solta (false) a resolução fina do timer neste processo.
+    fn set_timer_hold(&self, _on: bool) {}
 }
 
 pub const NORMAL_PRIORITY: u32 = 0x20;

@@ -184,6 +184,14 @@ impl GameSys for ElevatedSys {
         WinSys.processes()
     }
 
+    fn image_path(&self, pid: u32) -> Option<String> {
+        WinSys.image_path(pid)
+    }
+
+    fn set_timer_hold(&self, on: bool) {
+        WinSys.set_timer_hold(on)
+    }
+
     fn priority(&self, pid: u32) -> Option<u32> {
         WinSys.priority(pid)
     }

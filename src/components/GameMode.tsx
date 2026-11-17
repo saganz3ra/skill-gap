@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { X } from "lucide-react";
 
-import { api, GAME_PRESETS, SERVICE_LABEL, type GameEntry, type WatchConfig, type WatchStatus } from "../lib/api";
+import { api, errorMessage, GAME_PRESETS, SERVICE_LABEL, type GameEntry, type TimerReport, type WatchConfig, type WatchStatus } from "../lib/api";
 import { Switch } from "./ui";
 
 /** "há 12 min" atualizando sozinho. */
@@ -228,7 +228,7 @@ export function OptionsCard({ status, saving, save }: EditorProps) {
     setApp("");
   }
 
-  const options: { key: "powerBoost" | "pauseServices" | "lowerBackground"; title: string; desc: string }[] = [
+  const options: { key: "powerBoost" | "pauseServices" | "lowerBackground" | "timerMode" | "autoDetect"; title: string; desc: string }[] = [
     {
       key: "powerBoost",
       title: "Plano Alto desempenho",
@@ -238,6 +238,16 @@ export function OptionsCard({ status, saving, save }: EditorProps) {
       key: "pauseServices",
       title: "Pausar indexação e SysMain",
       desc: "Para a indexação da pesquisa e o pré-carregamento, que leem o disco em segundo plano. Precisa de admin.",
+    },
+    {
+      key: "autoDetect",
+      title: "Reconhecer jogos pela pasta",
+      desc: "Também conta como jogo o que roda de dentro das pastas da Steam, Epic, Riot, Xbox, EA, Ubisoft e GOG. Lido pelo caminho do arquivo, sem abrir o processo.",
+    },
+    {
+      key: "timerMode",
+      title: "Modo Timer (0,5 ms)",
+      desc: "Segura o timer fino do Windows enquanto o jogo roda. Só chega no jogo no Windows 11 com o “Timer Resolution global” ativo (veja a medição abaixo).",
     },
     {
       key: "lowerBackground",
@@ -297,6 +307,120 @@ export function OptionsCard({ status, saving, save }: EditorProps) {
           </form>
         </div>
       )}
+    </section>
+  );
+}
+
+/** Medição real do timer: o "antes" deste PC, sem alterar nada. */
+export function TimerCard() {
+  const [report, setReport] = useState<TimerReport | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const f = (n: number | null | undefined, d = 2) => (n === null || n === undefined ? "—" : `${n.toFixed(d)} ms`);
+
+  async function measure() {
+    setBusy(true);
+    setError(null);
+    try {
+      setReport(await api.timerMeasure());
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card" aria-labelledby="timer-titulo">
+      <div className="card-head">
+        <h2 id="timer-titulo" className="card-title">
+          Timer do Windows
+        </h2>
+        <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void measure()}>
+          {busy ? "Medindo…" : "Medir agora"}
+        </button>
+      </div>
+      <p className="muted small" style={{ margin: 0 }}>
+        Mede 120 pausas de 1 ms de verdade. No padrão do Windows cada uma dura ~15,6 ms; com timer fino, ~1 ms. Não altera nada.
+      </p>
+      {error && <div className="error-box">{error}</div>}
+      {report && (
+        <>
+          <dl className="spec-grid">
+            <div>
+              <dt>Sleep(1) médio</dt>
+              <dd>{f(report.sleep?.meanMs)}</dd>
+            </div>
+            <div>
+              <dt>Mín · Máx</dt>
+              <dd>
+                {f(report.sleep?.minMs)} · {f(report.sleep?.maxMs)}
+              </dd>
+            </div>
+            <div>
+              <dt>Desvio</dt>
+              <dd>{f(report.sleep?.stddevMs)}</dd>
+            </div>
+            <div>
+              <dt>Resolução atual</dt>
+              <dd>
+                {f(report.currentMs, 3)} <span className="muted small">(padrão {f(report.coarsestMs, 3)}, mais fina {f(report.finestMs, 3)})</span>
+              </dd>
+            </div>
+          </dl>
+          <p className={`small ${report.modeReachesGame ? "" : "warn-text"}`} style={{ margin: 0 }}>
+            {report.modeReachesGame
+              ? "Neste Windows, o Modo Timer do app chega até o jogo."
+              : report.globalRequests
+                ? "Neste Windows o pedido de timer vale só pra quem pede: o Modo Timer do app não chega no jogo."
+                : "O Modo Timer só chega no jogo com o ajuste “Timer Resolution global” (Windows 11) ativo em Todos os ajustes."}
+            {report.heldByApp && " O app está segurando o timer agora (partida em andamento)."}
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Jogos rodando agora que ainda não estão na lista. */
+export function SuggestionsCard({ status, saving, save }: EditorProps) {
+  const [list, setList] = useState<GameEntry[] | null>(null);
+  async function look() {
+    setList(await api.gameSuggestions().catch(() => []));
+  }
+  return (
+    <section className="card" aria-labelledby="sug-titulo">
+      <div className="card-head">
+        <h2 id="sug-titulo" className="card-title">
+          Jogos abertos agora
+        </h2>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => void look()}>
+          Procurar
+        </button>
+      </div>
+      <p className="muted small" style={{ margin: 0 }}>
+        Abra o jogo e clique em Procurar: o app reconhece pela pasta de instalação, sem abrir o processo.
+      </p>
+      {list && list.length === 0 && <p className="small" style={{ margin: 0 }}>Nenhum jogo novo rodando agora.</p>}
+      {list?.map((g) => (
+        <div key={g.exe} className="list-row">
+          <span className="list-row-text">
+            <span style={{ fontWeight: 500 }}>{g.name}</span>
+            <span className="list-row-sub mono">{g.exe}</span>
+          </span>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={saving}
+            onClick={() => {
+              save({ ...status.config, games: [...status.config.games, g] });
+              setList((l) => l?.filter((x) => x.exe !== g.exe) ?? null);
+            }}
+          >
+            Adicionar
+          </button>
+        </div>
+      ))}
     </section>
   );
 }

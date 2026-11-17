@@ -299,6 +299,14 @@ impl GameSys for WinSys {
         crate::gaming::process_list()
     }
 
+    fn image_path(&self, pid: u32) -> Option<String> {
+        crate::gaming::image_path(pid)
+    }
+
+    fn set_timer_hold(&self, on: bool) {
+        crate::timer::hold(on)
+    }
+
     fn priority(&self, pid: u32) -> Option<u32> {
         // Só leitura limitada: o mesmo acesso que o Gerenciador de Tarefas usa.
         let h = open_process(pid, PROCESS_QUERY_LIMITED_INFORMATION)?;
