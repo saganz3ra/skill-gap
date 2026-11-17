@@ -1,0 +1,468 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+// Tipos espelham as structs do Rust (serde rename_all = "camelCase").
+// Se mudar um lado, mude o outro: é o "contrato" entre front e backend.
+
+export type StartupSource = "userRun" | "machineRun" | "machineRun32" | "userFolder" | "commonFolder";
+
+export interface StartupItem {
+  id: string;
+  name: string;
+  command: string;
+  source: StartupSource;
+  sourceLabel: string;
+  enabled: boolean;
+  requiresAdmin: boolean;
+}
+
+export type PowerPlan = "powerSaver" | "balanced" | "highPerformance";
+
+export interface ActivePlan {
+  /** null = plano personalizado */
+  plan: PowerPlan | null;
+  guid: string;
+  name: string;
+}
+
+export type CleanupCategory = "userTemp" | "windowsTemp" | "windowsUpdateCache" | "shaderCache" | "recycleBin";
+
+export interface CategoryScan {
+  category: CleanupCategory;
+  path: string;
+  bytes: number;
+  files: number;
+  available: boolean;
+  partial: boolean;
+  requiresAdmin: boolean;
+}
+
+export interface CategoryResult {
+  category: CleanupCategory;
+  freedBytes: number;
+  deletedFiles: number;
+  skippedFiles: number;
+  error: string | null;
+}
+
+export interface CleanupReport {
+  results: CategoryResult[];
+  freedBytes: number;
+  /** Espaço livre medido no disco antes x depois; null se não deu pra medir. */
+  diskFreedBytes: number | null;
+}
+
+export type CheckId =
+  | "refreshRate"
+  | "mouseAcceleration"
+  | "backgroundRecording"
+  | "hags"
+  | "gameMode"
+  | "driverVsync";
+
+export interface GamingCheck {
+  id: CheckId;
+  status: "ok" | "warn" | "info";
+  current: string;
+  fixable: boolean;
+  requiresAdmin: boolean;
+  requiresRestart: boolean;
+  canRevert: boolean;
+}
+
+export interface DisplayInfo {
+  device: string;
+  name: string;
+  current: { width: number; height: number; hz: number };
+  maxHz: number;
+}
+
+export interface GamingReport {
+  checks: GamingCheck[];
+  displays: DisplayInfo[];
+  fpsCap: number | null;
+}
+
+export interface GameEntry {
+  name: string;
+  exe: string;
+  highPriority: boolean;
+}
+
+export interface WatchConfig {
+  enabled: boolean;
+  games: GameEntry[];
+  background: string[];
+  lowerBackground: boolean;
+  pauseServices: boolean;
+  powerBoost: boolean;
+}
+
+export interface GameSession {
+  game: GameEntry;
+  startedAt: number;
+  restoreGuid: string | null;
+  pausedServices: string[];
+  lowered: { pid: number; exe: string; previous: number }[];
+}
+
+export interface WatchStatus {
+  config: WatchConfig;
+  session: GameSession | null;
+  highPriorityApplied: string[];
+  lastError: string | null;
+}
+
+export type TweakCategory = "geral" | "aparencia" | "desempenho" | "privacidade" | "gaming" | "rede";
+export type Restart = "none" | "explorer" | "logoff" | "reboot";
+
+export interface TweakView {
+  id: string;
+  name: string;
+  description: string;
+  details: string;
+  category: TweakCategory;
+  impact: "real" | "small";
+  restart: Restart;
+  requiresAdmin: boolean;
+  laptopUnsafe: boolean;
+  state: "active" | "inactive" | "partial" | "unknown";
+  canRevert: boolean;
+  favorite: boolean;
+}
+
+export interface ProfileView {
+  id: string;
+  name: string;
+  description: string;
+  tweaks: string[];
+  builtin: boolean;
+}
+
+export interface BatchReport {
+  applied: string[];
+  skipped: string[];
+  failed: { id: string; error: string }[];
+  restart: Restart;
+}
+
+export interface SystemInfo {
+  windows: string;
+  build: number;
+  isLaptop: boolean;
+  ramGb: number;
+  systemDisk: "ssd" | "hdd" | "unknown";
+  isAdmin: boolean;
+  recommendedProfile: string;
+  reason: string;
+}
+
+export const CATEGORY_LABEL: Record<TweakCategory, string> = {
+  geral: "Geral",
+  aparencia: "Aparência",
+  desempenho: "Desempenho",
+  privacidade: "Privacidade",
+  gaming: "Gaming",
+  rede: "Rede",
+};
+
+export const RESTART_LABEL: Record<Restart, string | null> = {
+  none: null,
+  explorer: "Reinicia o Explorer",
+  logoff: "Sair e entrar na conta",
+  reboot: "Reiniciar o PC",
+};
+
+export interface MonitorSample {
+  cpu: number;
+  ramUsed: number;
+  ramTotal: number;
+  gpu: number | null;
+  vramUsed: number | null;
+  diskActive: number;
+  diskRead: number;
+  diskWrite: number;
+  netDown: number;
+  netUp: number;
+}
+
+export interface HardwareInfo {
+  cpuName: string;
+  cpuThreads: number;
+  cpuMhz: number;
+  gpuName: string;
+  ramTotal: number;
+}
+
+export interface DriverInfo {
+  name: string;
+  version: string;
+  date: string;
+  provider: string;
+  class: string;
+  downloadUrl: string | null;
+}
+
+export interface ProblemDevice {
+  name: string;
+  code: number;
+  class: string;
+  description: string;
+}
+
+export interface DriverInventory {
+  drivers: DriverInfo[];
+  problems: ProblemDevice[];
+}
+
+export interface FixView {
+  id: string;
+  name: string;
+  description: string;
+  when: string;
+  requiresAdmin: boolean;
+  restart: Restart;
+  duration: string;
+  steps: string[];
+}
+
+export interface FixReport {
+  id: string;
+  ok: boolean;
+  steps: { label: string; ok: boolean; output: string }[];
+  restart: Restart;
+}
+
+export interface FixProgress {
+  id: string;
+  step: number;
+  total: number;
+  label: string;
+}
+
+export const WINDOWS_UPDATE_URL = "ms-settings:windowsupdate";
+
+export type CustomPlan = "desktop" | "notebook";
+
+export interface EnergyStatus {
+  activeName: string;
+  activeGuid: string;
+  plans: { plan: CustomPlan; name: string; description: string; changes: string[]; installed: boolean; active: boolean }[];
+  canRevert: boolean;
+  skipped: string[];
+}
+
+export interface BootTime {
+  at: string;
+  totalMs: number;
+  mainMs: number;
+  postMs: number;
+}
+
+export interface SlowItem {
+  name: string;
+  friendly: string;
+  kind: "app" | "service";
+  totalMs: number;
+  degradationMs: number;
+  at: string;
+}
+
+export interface BootReport {
+  boots: BootTime[];
+  slow: SlowItem[];
+}
+
+export interface BloatApp {
+  name: string;
+  label: string;
+  description: string;
+  installed: boolean;
+  storeUrl: string;
+}
+
+export type AppErrorKind =
+  | "requiresAdmin"
+  | "elevationDenied"
+  | "helper"
+  | "notFound"
+  | "invalidInput"
+  | "commandFailed"
+  | "unsupported"
+  | "io";
+
+/** Situação do auxiliar de administrador (UAC sob demanda). */
+export interface ElevationStatus {
+  isAdmin: boolean;
+  helperRunning: boolean;
+}
+
+export interface AppError {
+  kind: AppErrorKind;
+  message: string;
+}
+
+export function isAppError(e: unknown): e is AppError {
+  return typeof e === "object" && e !== null && "kind" in e && "message" in e;
+}
+
+export function errorMessage(e: unknown): string {
+  if (isAppError(e)) return e.message;
+  if (e instanceof Error) return e.message;
+  return String(e);
+}
+
+/** true quando roda dentro do Tauri (false no navegador comum, ex.: `npm run dev` sozinho). */
+export function isTauri(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+export const api = {
+  listStartupItems: () => invoke<StartupItem[]>("list_startup_items"),
+  setStartupItemEnabled: (id: string, enabled: boolean) =>
+    invoke<void>("set_startup_item_enabled", { id, enabled }),
+  getPowerPlan: () => invoke<ActivePlan>("get_power_plan"),
+  setPowerPlan: (plan: PowerPlan) => invoke<void>("set_power_plan", { plan }),
+  scanCleanup: () => invoke<CategoryScan[]>("scan_cleanup"),
+  runCleanup: (categories: CleanupCategory[]) => invoke<CleanupReport>("run_cleanup", { categories }),
+  gamingDiagnose: () => invoke<GamingReport>("gaming_diagnose"),
+  gamingFix: (id: CheckId) => invoke<void>("gaming_fix", { id }),
+  gamingRevert: (id: CheckId) => invoke<void>("gaming_revert", { id }),
+  gameWatchStatus: () => invoke<WatchStatus>("game_watch_status"),
+  gameWatchSave: (config: WatchConfig) => invoke<WatchStatus>("game_watch_save", { config }),
+  listRunningProcesses: () => invoke<string[]>("list_running_processes"),
+  onGameSession: (cb: (s: WatchStatus) => void): Promise<UnlistenFn> =>
+    listen<WatchStatus>("game-session", (e) => cb(e.payload)),
+  tweaksList: () => invoke<TweakView[]>("tweaks_list"),
+  tweakApply: (id: string) => invoke<void>("tweak_apply", { id }),
+  tweakRevert: (id: string) => invoke<void>("tweak_revert", { id }),
+  tweaksRevertAll: () => invoke<BatchReport>("tweaks_revert_all"),
+  tweakSetFavorite: (id: string, favorite: boolean) => invoke<void>("tweak_set_favorite", { id, favorite }),
+  profilesList: () => invoke<ProfileView[]>("profiles_list"),
+  profileApply: (id: string, restorePoint: boolean) => invoke<BatchReport>("profile_apply", { id, restorePoint }),
+  profileSave: (name: string) => invoke<ProfileView>("profile_save", { name }),
+  profileDelete: (id: string) => invoke<void>("profile_delete", { id }),
+  systemInfo: () => invoke<SystemInfo>("system_info"),
+  createRestorePoint: () => invoke<void>("create_restore_point"),
+  restartExplorer: () => invoke<void>("restart_explorer"),
+  monitorSample: () => invoke<MonitorSample>("monitor_sample"),
+  hardwareInfo: () => invoke<HardwareInfo>("hardware_info"),
+  driversInventory: () => invoke<DriverInventory>("drivers_inventory"),
+  driversBackup: () => invoke<{ path: string; count: number }>("drivers_backup"),
+  openOfficialUrl: (url: string) => invoke<void>("open_official_url", { url }),
+  openBackupFolder: () => invoke<void>("open_backup_folder"),
+  fixesList: () => invoke<FixView[]>("fixes_list"),
+  fixRun: (id: string) => invoke<FixReport>("fix_run", { id }),
+  onFixProgress: (cb: (p: FixProgress) => void): Promise<UnlistenFn> =>
+    listen<FixProgress>("fix-progress", (e) => cb(e.payload)),
+  energyStatus: () => invoke<EnergyStatus>("energy_status"),
+  energyApply: (plan: CustomPlan) => invoke<EnergyStatus>("energy_apply", { plan }),
+  energyRevert: () => invoke<EnergyStatus>("energy_revert"),
+  /** `ask`: pode abrir o UAC. Sem ele, só lê se já houver permissão nesta sessão. */
+  bootReport: (ask = false) => invoke<BootReport>("boot_report", { ask }),
+  elevationStatus: () => invoke<ElevationStatus>("elevation_status"),
+  bloatList: () => invoke<BloatApp[]>("bloat_list"),
+  bloatRemove: (name: string) => invoke<void>("bloat_remove", { name }),
+  onCleanupProgress: (cb: (r: CategoryResult) => void): Promise<UnlistenFn> =>
+    listen<CategoryResult>("cleanup-progress", (e) => cb(e.payload)),
+};
+
+export const CLEANUP_INFO: Record<CleanupCategory, { name: string; desc: string; defaultOn: boolean }> = {
+  userTemp: {
+    name: "Arquivos temporários do usuário",
+    desc: "Só arquivos com mais de 24 h; os mais novos podem estar em uso por um instalador.",
+    defaultOn: true,
+  },
+  windowsTemp: {
+    name: "Temporários do Windows",
+    desc: "Mesma regra de 24 h. Precisa de administrador.",
+    defaultOn: true,
+  },
+  windowsUpdateCache: {
+    name: "Cache do Windows Update",
+    desc: "Atualizações já baixadas. Se alguma ainda for necessária, o Windows baixa de novo.",
+    defaultOn: true,
+  },
+  shaderCache: {
+    name: "Cache de shaders (DirectX)",
+    desc: "Apagar faz o próximo jogo engasgar enquanto recompila os shaders. Só limpe se um jogo estiver com bug gráfico.",
+    defaultOn: false,
+  },
+  recycleBin: {
+    name: "Lixeira",
+    desc: "Esvaziar é permanente.",
+    defaultOn: true,
+  },
+};
+
+export const PLAN_INFO: Record<PowerPlan, { name: string; desc: string; alias: string }> = {
+  powerSaver: {
+    name: "Economia de energia",
+    desc: "Reduz clock e brilho. Bom para notebook na bateria.",
+    alias: "SCHEME_MAX",
+  },
+  balanced: {
+    name: "Balanceado",
+    desc: "Padrão do Windows. Sobe o clock sob demanda.",
+    alias: "SCHEME_BALANCED",
+  },
+  highPerformance: {
+    name: "Alto desempenho",
+    desc: "CPU não entra em estados profundos de economia. Mais consumo e calor.",
+    alias: "SCHEME_MIN",
+  },
+};
+
+export const CHECK_INFO: Record<CheckId, { name: string; desc: string; fixLabel: string }> = {
+  refreshRate: {
+    name: "Taxa de atualização do monitor",
+    desc: "Monitor rodando abaixo do máximo é a causa mais comum de jogo “pesado”. Se o Windows não lista a taxa que o monitor promete, o limite é o cabo ou a porta (ex.: HDMI 1.4, saída da placa-mãe).",
+    fixLabel: "Usar o máximo",
+  },
+  driverVsync: {
+    name: "VSync forçado no driver",
+    desc: "Adiciona até um quadro inteiro de atraso. No Painel de Controle NVIDIA / AMD Software, deixe “Sincronização vertical” como “Usar configuração do aplicativo” ou desligado.",
+    fixLabel: "",
+  },
+  mouseAcceleration: {
+    name: "Aceleração do mouse",
+    desc: "“Aumentar precisão do ponteiro” muda a distância do cursor conforme a velocidade do movimento, o que deixa a memória muscular inconsistente.",
+    fixLabel: "Desligar",
+  },
+  backgroundRecording: {
+    name: "Gravação em segundo plano (Game Bar)",
+    desc: "Grava os últimos minutos do jogo o tempo todo, usando o codificador de vídeo da GPU.",
+    fixLabel: "Desligar",
+  },
+  hags: {
+    name: "Agendamento de GPU acelerado por hardware",
+    desc: "A própria GPU organiza a fila de quadros. Necessário pro DLSS Frame Generation; o ganho de latência varia por jogo. Exige reiniciar.",
+    fixLabel: "Ativar",
+  },
+  gameMode: {
+    name: "Modo de Jogo do Windows",
+    desc: "Prioriza o jogo e segura atualizações do Windows Update durante a partida.",
+    fixLabel: "Ligar",
+  },
+};
+
+/** Executáveis conhecidos, pra adicionar com um clique. */
+export const GAME_PRESETS: Omit<GameEntry, "highPriority">[] = [
+  { name: "Counter-Strike 2", exe: "cs2.exe" },
+  { name: "Valorant", exe: "VALORANT-Win64-Shipping.exe" },
+  { name: "Fortnite", exe: "FortniteClient-Win64-Shipping.exe" },
+  { name: "League of Legends", exe: "League of Legends.exe" },
+  { name: "Apex Legends", exe: "r5apex.exe" },
+  { name: "Rainbow Six Siege", exe: "RainbowSix.exe" },
+  { name: "Rocket League", exe: "RocketLeague.exe" },
+  { name: "OBS Studio", exe: "obs64.exe" },
+  { name: "Premiere Pro", exe: "Adobe Premiere Pro.exe" },
+  { name: "DaVinci Resolve", exe: "Resolve.exe" },
+  { name: "Blender", exe: "blender.exe" },
+];
+
+/** Serviços que o Modo Jogo pausa, com o nome que o usuário entende. */
+export const SERVICE_LABEL: Record<string, string> = {
+  WSearch: "Indexação da pesquisa",
+  SysMain: "Pré-carregamento (SysMain)",
+};

@@ -1,0 +1,64 @@
+/*
+  Tokens de tema. Os componentes usam só var(--...), nunca cor fixa.
+  Trocar de tema = mudar o atributo data-theme no <html>, sem re-renderizar o React.
+*/
+:root {
+  color-scheme: light;
+  --bg: #fbf7f6;
+  --side: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f6efee;
+  --border: #ebe1e0;
+  --text: #1a1416;
+  --muted: #6b6064;
+  /* vermelho para TEXTO: mais escuro no claro pra passar 4.5:1 */
+  --accent: #c8102e;
+  /* vermelho para FUNDO de botão/chave: texto branco passa 4.5:1 nos dois temas */
+  --brand: #d92638;
+  --brand-hover: #b81f2f;
+  --on-brand: #ffffff;
+  --soft: #fdecee;
+  --soft-border: #f3c4ca;
+  --grid: rgba(26, 20, 22, 0.06);
+  --dot: rgba(26, 20, 22, 0.1);
+  --glow: rgba(217, 38, 56, 0.13);
+  --track-off: #d9cfce;
+  --ok: #1e7a4c;
+  --ok-bg: rgba(30, 122, 76, 0.1);
+  --warn: #9a5b00;
+  --warn-bg: rgba(214, 140, 20, 0.14);
+  --info: #2f5fb3;
+  --info-bg: rgba(47, 95, 179, 0.1);
+  --idle-bg: rgba(107, 96, 100, 0.1);
+
+  --font-body: "Inter Variable", system-ui, sans-serif;
+  --font-display: "Space Grotesk", var(--font-body);
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --radius: 14px;
+  --radius-sm: 10px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f0d0e;
+  --side: #141113;
+  --surface: #1a1618;
+  --surface-2: #241d20;
+  --border: #2e2629;
+  --text: #f2ecee;
+  --muted: #aba1a5;
+  --accent: #ff5a67;
+  --soft: #2a1519;
+  --soft-border: #5c2830;
+  --grid: rgba(255, 255, 255, 0.05);
+  --dot: rgba(255, 255, 255, 0.08);
+  --glow: rgba(217, 38, 56, 0.22);
+  --track-off: #3b3236;
+  --ok: #5bd69a;
+  --ok-bg: rgba(91, 214, 154, 0.12);
+  --warn: #f5b547;
+  --warn-bg: rgba(245, 181, 71, 0.12);
+  --info: #8ab4f8;
+  --info-bg: rgba(138, 180, 248, 0.12);
+  --idle-bg: rgba(171, 161, 165, 0.14);
+}
