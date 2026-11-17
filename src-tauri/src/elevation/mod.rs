@@ -47,6 +47,14 @@ pub enum Request {
     /// Liga/desliga tarefa agendada (só as do catálogo).
     TaskEnabled { path: String, enabled: bool },
     PageCombining { enabled: bool },
+    /// `MSISupported` de um dispositivo PCI (o auxiliar confere na listagem atual).
+    MsiWrite { instance_id: String, value: Option<u32> },
+    /// Política QoS do app para um exe.
+    QosSet { exe: String, enabled: bool },
+    /// "Do not use NLA" (só None, "0" ou "1").
+    QosNla { value: Option<String> },
+    /// Propriedade avançada da placa de rede (o auxiliar confere os valores aceitos).
+    NicWrite { adapter: String, keyword: String, value: String },
     /// Configuração de rede (só valores da lista fechada).
     NetSetting { key: crate::tweaks::ops::NetKey, value: String },
     /// Recoloca IP/DNS fixos de um adaptador depois do "Resetar a rede".
@@ -163,6 +171,12 @@ pub fn check(req: &Request) -> Result<(), String> {
         }
         Request::TaskEnabled { path, .. } => task_allowed(all_ops(), path),
         Request::PageCombining { .. } => true,
+        Request::MsiWrite { instance_id, value } => crate::hardware::is_pci_instance(instance_id) && matches!(value, None | Some(0) | Some(1)),
+        Request::QosSet { exe, .. } => crate::hardware::qos_name(exe).is_some(),
+        Request::QosNla { value } => matches!(value.as_deref(), None | Some("0") | Some("1")),
+        Request::NicWrite { keyword, value, .. } => {
+            crate::hardware::NIC_KEYWORDS.iter().any(|(k, _)| k == keyword) && !value.is_empty() && value.chars().all(|c| c.is_ascii_digit())
+        }
         Request::NetSetting { key, value } => key.canonical(value).is_some(),
         Request::RestoreNetwork { adapter } => crate::netcfg::validate(adapter).is_ok(),
         Request::CleanCategory { category } => category.requires_admin(),

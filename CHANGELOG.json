@@ -34,6 +34,14 @@
       {
         "kind": "novo",
         "text": "Jogos reconhecidos pela pasta (Steam, Epic, Riot, Xbox, EA, Ubisoft, GOG), ignorando launchers, instaladores e anticheats, e botão para adicionar os jogos abertos agora. O caminho é lido sem abrir o processo do jogo."
+      },
+      {
+        "kind": "novo",
+        "text": "Tela Hardware e jogos: modo MSI por dispositivo (vídeo, rede, armazenamento, USB 3, áudio HD), tela cheia clássica e prioridade de rede (QoS/DSCP 46) por jogo da Steam, e propriedades da placa de rede (moderação de interrupções, EEE, controle de fluxo) só com valores que a placa aceita. Tudo com o valor anterior anotado."
+      },
+      {
+        "kind": "novo",
+        "text": "Ajuste \"Autotuning TCP restrito\" para quem sofre com bufferbloat (ping que sobe quando alguém baixa algo)."
       }
     ]
   },

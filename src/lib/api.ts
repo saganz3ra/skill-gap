@@ -235,6 +235,31 @@ export interface DiagnosisReport {
   comparison: { baselineAt: number | null; afterChanges: boolean; rows: ComparisonRow[] };
 }
 
+export interface MsiDevice {
+  instanceId: string;
+  name: string;
+  class: string;
+  msi: number | null;
+}
+
+export interface SteamGame {
+  appId: string;
+  name: string;
+  installDir: string;
+  exe: string | null;
+  classicFullscreen: boolean;
+  qos: boolean;
+}
+
+export interface NicProperty {
+  adapter: string;
+  keyword: string;
+  label: string;
+  value: string;
+  valid: string[];
+  display: string[];
+}
+
 export type Gate = { status: "ok" } | { status: "warn"; reason: string } | { status: "unavailable"; reason: string };
 
 /** Mesma regra do backend (`profile_skip_reason`): o que um perfil pula. */
@@ -457,6 +482,15 @@ export const api = {
   gameWatchSave: (config: WatchConfig) => invoke<WatchStatus>("game_watch_save", { config }),
   listRunningProcesses: () => invoke<string[]>("list_running_processes"),
   timerMeasure: () => invoke<TimerReport>("timer_measure"),
+  /** [dispositivos, InstanceIds com valor anotado pelo app] */
+  hwMsiList: () => invoke<[MsiDevice[], string[]]>("hw_msi_list"),
+  hwMsiSet: (instanceId: string, enabled: boolean) => invoke<void>("hw_msi_set", { instanceId, enabled }),
+  hwSteamGames: () => invoke<SteamGame[]>("hw_steam_games"),
+  hwFseSet: (exePath: string, enabled: boolean) => invoke<void>("hw_fse_set", { exePath, enabled }),
+  hwQosSet: (exePath: string, enabled: boolean) => invoke<void>("hw_qos_set", { exePath, enabled }),
+  hwNicList: () => invoke<[NicProperty[], string[]]>("hw_nic_list"),
+  /** `value: null` volta ao valor anotado. */
+  hwNicSet: (adapter: string, keyword: string, value: string | null) => invoke<void>("hw_nic_set", { adapter, keyword, value }),
   gameSuggestions: () => invoke<GameEntry[]>("game_suggestions"),
   onGameSession: (cb: (s: WatchStatus) => void): Promise<UnlistenFn> =>
     listen<WatchStatus>("game-session", (e) => cb(e.payload)),
