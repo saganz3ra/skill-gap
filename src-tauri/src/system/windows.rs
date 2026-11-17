@@ -2,16 +2,34 @@ use std::mem::{size_of, zeroed};
 use std::os::windows::process::CommandExt;
 use std::process::Command;
 
+use windows_sys::Win32::Globalization::{MultiByteToWideChar, CP_OEMCP};
 use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
 use windows_sys::Win32::UI::Shell::IsUserAnAdmin;
 use winreg::enums::HKEY_LOCAL_MACHINE;
 use winreg::RegKey;
 
-use super::{parse_media_type, recommend, SystemInfo};
+use super::{decode_console, parse_media_type, recommend, SystemInfo};
 use crate::error::{AppError, AppResult};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Bytes na code page OEM do console (a mesma que o `chcp` mostra) → texto.
+pub fn oem_to_string(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+    let len = bytes.len().min(i32::MAX as usize) as i32;
+    unsafe {
+        let n = MultiByteToWideChar(CP_OEMCP, 0, bytes.as_ptr(), len, std::ptr::null_mut(), 0);
+        if n <= 0 {
+            return String::from_utf8_lossy(bytes).into_owned();
+        }
+        let mut wide = vec![0u16; n as usize];
+        MultiByteToWideChar(CP_OEMCP, 0, bytes.as_ptr(), len, wide.as_mut_ptr(), n);
+        String::from_utf16_lossy(&wide)
+    }
+}
 
 /// Roda um script no Windows PowerShell 5.1 (vem em todo Windows 10/11) e devolve a saída.
 pub fn powershell(script: &str) -> AppResult<String> {
@@ -19,11 +37,11 @@ pub fn powershell(script: &str) -> AppResult<String> {
         .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script])
         .creation_flags(CREATE_NO_WINDOW)
         .output()?;
-    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let stdout = decode_console(&out.stdout).trim().to_string();
     if out.status.success() {
         Ok(stdout)
     } else {
-        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        let stderr = decode_console(&out.stderr).trim().to_string();
         let detail = if stderr.is_empty() { stdout } else { stderr };
         // Mensagem de acesso negado do PowerShell vira o erro tipado de admin.
         if detail.contains("Acesso negado") || detail.contains("Access is denied") || detail.contains("0x80070005") {

@@ -49,7 +49,8 @@ pub static FIXES: &[Fix] = &[
         name: "Limpar cache de DNS",
         description: "Esquece os endereços de sites guardados no PC.",
         when: "Site que mudou de servidor não abre, ou abre a versão antiga.",
-        requires_admin: false,
+        // No Windows 11 atual o `ipconfig /flushdns` responde "requer elevação" sem admin.
+        requires_admin: true,
         restart: Restart::None,
         duration: "1 segundo",
         steps: &[Step::Cmd { label: "Limpando cache de DNS", program: "ipconfig", args: &["/flushdns"] }],
@@ -194,16 +195,9 @@ pub struct FixProgress {
 
 // ---------------- Saída dos comandos ----------------
 
-/// Converte a saída de um comando em texto. O `sfc` escreve em UTF-16 quando a saída
-/// é redirecionada (cheio de bytes 0); os outros escrevem na code page do console.
+/// Ver `system::decode_console` (UTF-16 do sfc, UTF-8 ou code page OEM).
 pub fn decode_output(bytes: &[u8]) -> String {
-    let zeros = bytes.iter().skip(1).step_by(2).filter(|b| **b == 0).count();
-    if bytes.len() >= 4 && zeros * 2 >= bytes.len() / 2 {
-        let units: Vec<u16> = bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
-        String::from_utf16_lossy(&units).trim_start_matches('\u{feff}').to_string()
-    } else {
-        String::from_utf8_lossy(bytes).into_owned()
-    }
+    crate::system::decode_console(bytes)
 }
 
 /// Barras de progresso (sfc e DISM) reescrevem a mesma linha com `\r`: fica só a
