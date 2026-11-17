@@ -12,8 +12,10 @@ mod monitor;
 mod netcfg;
 mod news;
 mod power;
+mod remote;
 mod restore;
 mod startup;
+mod telemetry;
 mod system;
 mod timer;
 mod tweaks;
@@ -529,6 +531,163 @@ async fn hw_nic_set(app: tauri::AppHandle, adapter: String, keyword: String, val
     .await
 }
 
+// ---------------- Overlay, FPS e segunda tela ----------------
+
+type Frames = Arc<telemetry::presentmon::Frames>;
+struct RemoteSlot(std::sync::Mutex<Option<remote::RemoteServer>>);
+struct GpuTempCache(std::sync::Mutex<(Option<std::time::Instant>, Option<f64>)>);
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Telemetry {
+    sample: Option<monitor::Sample>,
+    gpu_temp: Option<f64>,
+    ping: telemetry::PingStats,
+    frames: Option<telemetry::presentmon::FrameStats>,
+    game: Option<String>,
+}
+
+/// Uma leitura (puxada pela tela). Mede FPS só do jogo da partida atual do Modo Jogo,
+/// e só se o PresentMon estiver instalado e com permissão.
+fn telemetry_snapshot(app: &tauri::AppHandle) -> Telemetry {
+    let sample = monitor::sample(&app.state::<monitor::MonitorState>()).ok();
+    let ping = app.state::<telemetry::PingState>().tick(telemetry::echo);
+    let gpu_temp = {
+        let cache = app.state::<GpuTempCache>();
+        let mut c = cache.0.lock().unwrap_or_else(|e| e.into_inner());
+        if c.0.is_none_or(|t| t.elapsed().as_secs() >= 5) {
+            *c = (Some(std::time::Instant::now()), telemetry::gpu_temp());
+        }
+        c.1
+    };
+    let game = app.state::<Arc<Watcher>>().status().session.map(|s| s.game.exe);
+    let frames = app.state::<Frames>().inner().clone();
+    let can = system::is_admin() || telemetry::presentmon::in_perf_group();
+    match &game {
+        Some(exe) if can && telemetry::presentmon::installed() => {
+            let _ = telemetry::presentmon::start(exe, frames.clone());
+        }
+        _ => telemetry::presentmon::stop(),
+    }
+    let frames = telemetry::presentmon::capturing().and_then(|_| frames.stats());
+    Telemetry { sample, gpu_temp, ping, frames, game }
+}
+
+#[tauri::command]
+async fn telemetry_sample(app: tauri::AppHandle) -> AppResult<Telemetry> {
+    blocking(move || Ok(telemetry_snapshot(&app))).await
+}
+
+/// Mostra/esconde o overlay: janela transparente, sempre no topo, que deixa o clique
+/// passar. Não injeta nada no jogo (por isso não aparece em tela cheia EXCLUSIVA).
+#[tauri::command]
+async fn overlay_show(app: tauri::AppHandle, show: bool) -> AppResult<()> {
+    let err = |e: tauri::Error| AppError::Helper(e.to_string());
+    match (app.get_webview_window("overlay"), show) {
+        (Some(w), false) => {
+            w.close().map_err(err)?;
+            if app.state::<RemoteSlot>().0.lock().map(|s| s.is_none()).unwrap_or(true) {
+                telemetry::presentmon::stop();
+            }
+        }
+        (None, true) => {
+            let w = tauri::WebviewWindowBuilder::new(&app, "overlay", tauri::WebviewUrl::App("index.html".into()))
+                .title("Skill Gap · overlay")
+                .inner_size(230.0, 136.0)
+                .position(16.0, 16.0)
+                .decorations(false)
+                .transparent(true)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .resizable(false)
+                .focused(false)
+                .shadow(false)
+                .build()
+                .map_err(err)?;
+            w.set_ignore_cursor_events(true).map_err(err)?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn pm_status(app: tauri::AppHandle) -> AppResult<telemetry::presentmon::PresentMonStatus> {
+    blocking(move || {
+        let in_group = telemetry::presentmon::in_perf_group();
+        Ok(telemetry::presentmon::PresentMonStatus {
+            version: telemetry::presentmon::VERSION,
+            installed: telemetry::presentmon::installed(),
+            can_capture: system::is_admin() || in_group,
+            needs_logoff: hw(&app).snapshot().perf_log_users && !in_group,
+            capturing: telemetry::presentmon::capturing(),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn pm_install() -> AppResult<()> {
+    blocking(telemetry::presentmon::install).await
+}
+
+/// Põe (ou tira) o seu usuário no grupo que permite medir FPS sem administrador.
+#[tauri::command]
+async fn pm_permission(app: tauri::AppHandle, add: bool) -> AppResult<()> {
+    blocking(move || {
+        let sid = elevation::current_user_sid()?;
+        if add {
+            hw(&app).record(|j| j.perf_log_users = true)?;
+        } else if !hw(&app).snapshot().perf_log_users {
+            return Err(hardware::invalid("o app não colocou você nesse grupo; nada a desfazer"));
+        }
+        elevated(
+            || telemetry::presentmon::set_perf_group(&sid, add),
+            elevation::Request::PerfLogGroup { sid: sid.clone(), add },
+        )?;
+        if !add {
+            hw(&app).record(|j| j.perf_log_users = false)?;
+        }
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remote_start(app: tauri::AppHandle) -> AppResult<remote::RemoteInfo> {
+    blocking(move || {
+        let slot = app.state::<RemoteSlot>();
+        let mut s = slot.0.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(srv) = s.as_ref() {
+            return Ok(srv.info.clone());
+        }
+        let handle = app.clone();
+        let snapshot: remote::Snapshot = Arc::new(move || serde_json::to_value(telemetry_snapshot(&handle)).unwrap_or_default());
+        let srv = remote::start(elevation::random_hex()?, snapshot)?;
+        let info = srv.info.clone();
+        *s = Some(srv);
+        Ok(info)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remote_stop(app: tauri::AppHandle) -> AppResult<()> {
+    blocking(move || {
+        app.state::<RemoteSlot>().0.lock().unwrap_or_else(|e| e.into_inner()).take();
+        if app.get_webview_window("overlay").is_none() {
+            telemetry::presentmon::stop();
+        }
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+fn remote_status(app: tauri::AppHandle) -> Option<remote::RemoteInfo> {
+    app.state::<RemoteSlot>().0.lock().ok().and_then(|s| s.as_ref().map(|r| r.info.clone()))
+}
+
 // ---------------- Timer ----------------
 
 /// Mede o timer agora (sem alterar nada). Leva até ~2 s.
@@ -783,6 +942,10 @@ pub fn run() {
         .manage(gaming::GamingState::default())
         .manage(monitor::MonitorState::default())
         .manage(system::SystemCache::default())
+        .manage(telemetry::PingState::default())
+        .manage(Frames::default())
+        .manage(RemoteSlot(std::sync::Mutex::new(None)))
+        .manage(GpuTempCache(std::sync::Mutex::new((None, None))))
         .manage(FixLock(AtomicBool::new(false)))
         .setup(|app| {
             // Configs e diários em %APPDATA%\app.skillgap.desktop\
@@ -875,7 +1038,15 @@ pub fn run() {
             bloat_restore,
             guardian_status,
             guardian_reapply,
-            support_report
+            support_report,
+            telemetry_sample,
+            overlay_show,
+            pm_status,
+            pm_install,
+            pm_permission,
+            remote_start,
+            remote_stop,
+            remote_status
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Skill Gap");

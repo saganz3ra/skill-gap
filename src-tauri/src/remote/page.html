@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Skill Gap · segunda tela</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #0e0d0d; color: #f2eeee; }
+  header { padding: 14px 16px; font-weight: 600; border-bottom: 1px solid #2a2626; }
+  header span { color: #e5383b; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
+  .t { background: #181515; border: 1px solid #2a2626; border-radius: 12px; padding: 12px; }
+  .l { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #a39b9b; }
+  .v { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .s { font-size: 12px; color: #a39b9b; margin-top: 2px; }
+  .wide { grid-column: 1 / -1; }
+  #st { font-size: 12px; color: #a39b9b; padding: 0 16px 16px; }
+</style>
+</head>
+<body>
+<header><span>Skill Gap</span> · segunda tela</header>
+<main>
+  <div class="t wide"><div class="l">FPS</div><div class="v" id="fps">—</div><div class="s" id="ft">abra um jogo da lista do Modo Jogo</div></div>
+  <div class="t"><div class="l">CPU</div><div class="v" id="cpu">—</div><div class="s" id="ct"></div></div>
+  <div class="t"><div class="l">GPU</div><div class="v" id="gpu">—</div><div class="s" id="gt"></div></div>
+  <div class="t"><div class="l">Ping</div><div class="v" id="ping">—</div><div class="s" id="jit"></div></div>
+  <div class="t"><div class="l">RAM</div><div class="v" id="ram">—</div><div class="s" id="ramt"></div></div>
+</main>
+<div id="st">Conectando…</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const n = (v, d = 0) => (v === null || v === undefined ? "—" : Number(v).toFixed(d));
+  const es = new EventSource("events");
+  es.onopen = () => ($("st").textContent = "Ao vivo · 1 leitura por segundo");
+  es.onerror = () => ($("st").textContent = "Sem conexão com o PC (a segunda tela foi desligada?)");
+  es.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    const s = d.sample || {};
+    if (d.frames) {
+      $("fps").textContent = n(d.frames.fps);
+      $("ft").textContent = n(d.frames.frametimeMs, 2) + " ms · var " + n(d.frames.varMs, 2) + " ms" + (d.game ? " · " + d.game : "");
+    }
+    $("cpu").textContent = n(s.cpu) + "%";
+    $("ct").textContent = s.cpuTemp ? "~" + n(s.cpuTemp) + " °C (aproximada)" : "";
+    $("gpu").textContent = s.gpu === null || s.gpu === undefined ? "—" : n(s.gpu) + "%";
+    $("gt").textContent = d.gpuTemp ? n(d.gpuTemp) + " °C" : "";
+    $("ping").textContent = d.ping && d.ping.lastMs !== null ? n(d.ping.lastMs) + " ms" : "—";
+    $("jit").textContent = d.ping ? "jitter " + n(d.ping.jitterMs, 1) + " ms · perda " + n(d.ping.lossPct) + "%" : "";
+    $("ram").textContent = s.ramTotal ? n((s.ramUsed / s.ramTotal) * 100) + "%" : "—";
+    $("ramt").textContent = s.ramUsed ? n(s.ramUsed / 1073741824, 1) + " GB" : "";
+  };
+</script>
+</body>
+</html>

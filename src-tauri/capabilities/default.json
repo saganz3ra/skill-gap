@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissões da janela principal. Só o necessário: o padrão do core e trocar o tema da janela.",
-  "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-set-theme"]
+  "description": "Permissões das janelas do app (principal e overlay). Só o necessário: o padrão do core e trocar o tema da janela.",
+  "windows": [
+    "main",
+    "overlay"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-theme"
+  ]
 }

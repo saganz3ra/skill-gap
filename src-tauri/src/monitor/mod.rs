@@ -31,6 +31,9 @@ pub struct Sample {
     /// Bytes por segundo, somando os adaptadores.
     pub net_down: f64,
     pub net_up: f64,
+    /// Temperatura da zona térmica ACPI mais quente, em °C. APROXIMADA: em muitas
+    /// placas-mãe ela não é o sensor do núcleo da CPU. None = a placa não expõe.
+    pub cpu_temp: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
