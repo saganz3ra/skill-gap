@@ -220,6 +220,7 @@ fn execute(req: Request, mut progress: impl FnMut(serde_json::Value)) -> AppResu
             let report = crate::fixes::run(fix, |p| progress(serde_json::to_value(p).unwrap_or_default()));
             Ok(serde_json::to_value(report).unwrap_or_default())
         }
+        Request::RestoreNetwork { adapter } => unit(crate::netcfg::apply(&adapter)),
         Request::CleanCategory { category } => Ok(serde_json::to_value(crate::cleanup::clean_one(category)).unwrap_or_default()),
     }
 }
