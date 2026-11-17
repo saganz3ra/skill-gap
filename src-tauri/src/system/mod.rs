@@ -46,6 +46,34 @@ pub enum DiskKind {
     Unknown,
 }
 
+/// Fatos do hardware que não mudam com o PC ligado. Lidos uma vez e guardados em
+/// cache (`SystemCache`): o tipo do disco custa um PowerShell (~0,5–1 s).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemProfile {
+    pub windows: String,
+    /// 0 = não deu pra ler.
+    pub build: u32,
+    pub is_laptop: bool,
+    /// RAM INSTALADA em GB (0 = não deu pra ler).
+    pub ram_gb: u32,
+    pub system_disk: DiskKind,
+}
+
+#[derive(Default)]
+pub struct SystemCache(std::sync::Mutex<Option<SystemProfile>>);
+
+impl SystemCache {
+    /// `refresh`: botão "Reanalisar" (ex.: trocou o disco do sistema).
+    pub fn get(&self, refresh: bool) -> SystemProfile {
+        let mut slot = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if refresh || slot.is_none() {
+            *slot = Some(read_profile());
+        }
+        slot.clone().expect("preenchido acima")
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemInfo {
@@ -58,6 +86,27 @@ pub struct SystemInfo {
     pub recommended_profile: &'static str,
     /// Por que esse perfil foi recomendado, em uma frase.
     pub reason: String,
+    /// Monitor principal: taxa atual e a maior disponível na resolução atual. Lido na
+    /// hora (fora do cache): muda quando se troca de monitor.
+    pub display_hz: Option<u32>,
+    pub max_display_hz: Option<u32>,
+}
+
+/// Junta o perfil (cache) com o que é lido na hora.
+pub fn build_info(p: &SystemProfile, is_admin: bool, display: Option<(u32, u32)>) -> SystemInfo {
+    let (recommended_profile, reason) = recommend(p.is_laptop, p.ram_gb, p.system_disk);
+    SystemInfo {
+        windows: p.windows.clone(),
+        build: p.build,
+        is_laptop: p.is_laptop,
+        ram_gb: p.ram_gb,
+        system_disk: p.system_disk,
+        is_admin,
+        recommended_profile,
+        reason,
+        display_hz: display.map(|d| d.0),
+        max_display_hz: display.map(|d| d.1),
+    }
 }
 
 /// Regra de recomendação. Pura, pra dar pra testar.
@@ -84,30 +133,15 @@ pub fn parse_media_type(s: &str) -> DiskKind {
 }
 
 #[cfg(windows)]
-pub use windows::{info, is_admin, is_laptop, powershell, restart_explorer};
+pub use windows::{is_admin, powershell, read_profile, restart_explorer};
 
 #[cfg(not(windows))]
-pub fn info() -> SystemInfo {
-    let (recommended_profile, reason) = recommend(false, 0, DiskKind::Unknown);
-    SystemInfo {
-        windows: "—".into(),
-        build: 0,
-        is_laptop: false,
-        ram_gb: 0,
-        system_disk: DiskKind::Unknown,
-        is_admin: false,
-        recommended_profile,
-        reason,
-    }
+pub fn read_profile() -> SystemProfile {
+    SystemProfile { windows: "—".into(), build: 0, is_laptop: false, ram_gb: 0, system_disk: DiskKind::Unknown }
 }
 
 #[cfg(not(windows))]
 pub fn is_admin() -> bool {
-    false
-}
-
-#[cfg(not(windows))]
-pub fn is_laptop() -> bool {
     false
 }
 

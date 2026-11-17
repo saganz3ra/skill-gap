@@ -69,9 +69,16 @@ export function BatchSummary({ report, names, verb }: { report: BatchReport; nam
           : `${report.applied.length} ${report.applied.length === 1 ? "ajuste" : "ajustes"} ${verb}.`}
       </p>
       {report.skipped.length > 0 && (
-        <p className="muted small" style={{ margin: 0 }}>
-          Pulados por ser notebook (esquentam ou gastam bateria): {report.skipped.map(label).join(", ")}.
-        </p>
+        <div className="muted small">
+          Pulados de propósito (dá pra aplicar à mão em Todos os ajustes):
+          <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+            {report.skipped.map((s) => (
+              <li key={s.id}>
+                {label(s.id)}: {s.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {report.failed.length > 0 && (
         <div className="error-box">

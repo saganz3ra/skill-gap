@@ -385,6 +385,15 @@ a {
   background: var(--idle-bg);
 }
 
+.badge-danger {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.warn-text {
+  color: var(--warn);
+}
+
 /* ---------- Chave liga/desliga ---------- */
 
 .switch {
