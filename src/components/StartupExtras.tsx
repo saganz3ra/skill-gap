@@ -129,11 +129,12 @@ export function BloatApps() {
         <h2 id="bloat-titulo" className="card-title">
           Apps de fábrica
         </h2>
-        <span className="badge badge-warn">Reinstala pela Store</span>
+        <span className="badge badge-ok">Reinstala sem a Store</span>
       </div>
       <p className="plan-desc" style={{ margin: "0 0 8px" }}>
         Apps que o Windows instala sozinho. Remover vale só pra sua conta e libera um pouco de espaço e de itens em segundo
-        plano. Xbox, Game Bar, Store, Fotos e Calculadora ficam de fora de propósito.
+        plano. A cópia do Windows fica no PC, então dá pra reinstalar sem internet. Xbox, Game Bar, Store, Fotos e Calculadora ficam
+        de fora de propósito.
       </p>
       {apps.error ? <div className="error-box">{friendlyError(apps.error)}</div> : null}
       {message && <div className="error-box">{message}</div>}
@@ -159,19 +160,40 @@ export function BloatApps() {
       {removed.length > 0 && (
         <details style={{ paddingTop: 10 }}>
           <summary className="small muted" style={{ cursor: "pointer", minHeight: 32 }}>
-            Não instalados ({removed.length}) · reinstalar pela Store
+            Não instalados ({removed.length}) · reinstalar
           </summary>
           {removed.map((a) => (
             <div key={a.name} className="list-row" style={{ minHeight: 48 }}>
               <span className="list-row-text">{a.label}</span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => void api.openOfficialUrl(a.storeUrl).catch((e) => setMessage(friendlyError(e)))}
-              >
-                <ExternalLink size={14} aria-hidden="true" />
-                Abrir na Store
-              </button>
+              <span style={{ display: "flex", gap: 6 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={busy !== null}
+                  onClick={async () => {
+                    setBusy(a.name);
+                    setMessage(null);
+                    try {
+                      await api.bloatRestore(a.name);
+                      await apps.reload();
+                    } catch (e) {
+                      setMessage(`${a.label}: ${friendlyError(e)}`);
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
+                >
+                  {busy === a.name ? "Reinstalando…" : "Reinstalar"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => void api.openOfficialUrl(a.storeUrl).catch((e) => setMessage(friendlyError(e)))}
+                >
+                  <ExternalLink size={14} aria-hidden="true" />
+                  Store
+                </button>
+              </span>
             </div>
           ))}
         </details>

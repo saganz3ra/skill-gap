@@ -42,6 +42,30 @@
       {
         "kind": "novo",
         "text": "Ajuste \"Autotuning TCP restrito\" para quem sofre com bufferbloat (ping que sobe quando alguém baixa algo)."
+      },
+      {
+        "kind": "novo",
+        "text": "Limpeza: cache dos navegadores (só com o navegador fechado), relatórios de travamento, minidumps de tela azul e cache de miniaturas."
+      },
+      {
+        "kind": "novo",
+        "text": "Correção \"Otimizar o disco do sistema\": TRIM no SSD ou desfragmentação no HD, escolhido pelo tipo de disco."
+      },
+      {
+        "kind": "novo",
+        "text": "Guardião: o Início avisa quando o Windows desfez ajustes que você tinha aplicado (comum depois de grandes atualizações) e reaplica com um clique."
+      },
+      {
+        "kind": "novo",
+        "text": "Serviços em grupo (Básico e Avançado), sem nunca tocar em Defender, firewall, Windows Update, Store, impressão, áudio, rede e temas; política do Chrome sem segundo plano; GPU de alto desempenho por jogo."
+      },
+      {
+        "kind": "melhoria",
+        "text": "Apps de fábrica removidos voltam sem a Store: o app reinstala a partir da cópia que o Windows mantém no próprio PC."
+      },
+      {
+        "kind": "novo",
+        "text": "Relatório para suporte no Diagnóstico: um texto com a máquina e o que o app mudou, sem nome de usuário nem e-mail."
       }
     ]
   },

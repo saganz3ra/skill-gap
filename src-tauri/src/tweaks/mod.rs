@@ -146,6 +146,7 @@ fn unsupported_reason(t: &Tweak) -> String {
         Some(ops::Op::ScheduledTaskOff { .. }) => "a tarefa não existe neste Windows".into(),
         Some(ops::Op::Net { .. }) => "este Windows não tem essa configuração de rede".into(),
         Some(ops::Op::JsonFileKey { .. }) => "o app não está instalado (ou nunca foi aberto)".into(),
+        Some(ops::Op::Service { .. }) => "o serviço não existe neste Windows".into(),
         _ => "este PC não tem o que o ajuste precisa".into(),
     }
 }
@@ -306,6 +307,18 @@ impl TweakEngine {
                 self.persist(&store)
             }
         }
+    }
+
+    /// Ajustes que o APP aplicou (têm foto) e que o Windows desfez depois (grande
+    /// atualização, política, outro programa). Lido do estado real.
+    pub fn undone_by_windows(&self) -> Vec<&'static str> {
+        let store = self.lock().clone();
+        TWEAKS
+            .iter()
+            .filter(|t| store.snapshots.contains_key(t.id))
+            .filter(|t| matches!(self.state(t), TweakState::Inactive | TweakState::Partial))
+            .map(|t| t.id)
+            .collect()
     }
 
     pub fn revert_all(&self) -> BatchReport {
@@ -679,6 +692,20 @@ mod tests {
 
     fn desktop() -> SystemProfile {
         SystemProfile { windows: String::new(), build: 26100, is_laptop: false, ram_gb: 32, system_disk: crate::system::DiskKind::Ssd }
+    }
+
+    #[test]
+    fn guardiao_ve_o_que_o_windows_desfez() {
+        let (e, _, fake) = engine("guardiao");
+        e.apply("game_mode").unwrap();
+        assert!(e.undone_by_windows().is_empty());
+        // Uma grande atualização volta o valor de fábrica:
+        fake.set_dword(Hive::Hkcu, r"Software\Microsoft\GameBar", "AutoGameModeEnabled", Some(0)).unwrap();
+        assert_eq!(e.undone_by_windows(), ["game_mode"]);
+        e.apply_checked("game_mode", &desktop(), true).unwrap();
+        assert!(e.undone_by_windows().is_empty());
+        // Ajuste que já estava assim antes do app (sem foto) não entra.
+        assert!(!e.undone_by_windows().contains(&"hags"));
     }
 
     #[test]

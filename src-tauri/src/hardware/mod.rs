@@ -58,6 +58,9 @@ pub fn msi_path(instance_id: &str) -> String {
 // ---------------- Tela cheia clássica por jogo ----------------
 
 pub const FSE_FLAG: &str = "DISABLEDXMAXIMIZEDWINDOWEDMODE";
+/// Preferência de GPU por app (Configurações › Vídeo › Gráficos). 2 = alto desempenho.
+pub const GPU_PREFS: &str = r"Software\Microsoft\DirectX\UserGpuPreferences";
+pub const GPU_HIGH: &str = "GpuPreference=2;";
 pub const LAYERS: &str = r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers";
 
 /// Junta a flag às que já existem (ex.: `~ RUNASADMIN`) sem duplicar.
@@ -83,6 +86,8 @@ pub struct SteamGame {
     pub exe: Option<String>,
     pub classic_fullscreen: bool,
     pub qos: bool,
+    /// Windows usa a GPU de alto desempenho neste jogo (útil em notebook com 2 GPUs).
+    pub high_perf_gpu: bool,
 }
 
 /// Lê `"chave" "valor"` de arquivos VDF/ACF da Steam (o suficiente para path/name/installdir).
@@ -170,6 +175,8 @@ pub struct Journal {
     pub qos: BTreeMap<String, bool>,
     /// "adaptador|keyword" → valor anterior.
     pub nic: BTreeMap<String, String>,
+    /// Caminho do exe → preferência de GPU anterior.
+    pub gpu: BTreeMap<String, Option<String>>,
     /// "Do not use NLA" antes da primeira política QoS (`Some(None)` = não existia).
     pub nla: Option<Option<String>>,
 }
@@ -223,6 +230,12 @@ mod stubs {
     }
     pub fn steam_games() -> Vec<SteamGame> {
         Vec::new()
+    }
+    pub fn gpu_read(_exe: &str) -> Option<String> {
+        None
+    }
+    pub fn gpu_write(_exe: &str, _v: Option<&str>) -> AppResult<()> {
+        Err(AppError::Unsupported)
     }
     pub fn fse_read(_exe: &str) -> Option<String> {
         None

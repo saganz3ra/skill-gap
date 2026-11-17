@@ -148,6 +148,8 @@ pub fn supported(sys: &dyn Sys, op: &Op) -> bool {
         Op::ScheduledTaskOff { path } => sys.task_enabled(path).is_some(),
         Op::Net { key, .. } => sys.net_setting(key).is_ok(),
         Op::JsonFileKey { env, file, .. } => sys.json_file_exists(env, file),
+        // Serviço que não existe neste Windows: gravar `Start` criaria uma chave fantasma.
+        Op::Service { name, .. } => sys.dword(Hive::Hklm, &service_path(name), "Start").is_some(),
         _ => true,
     }
 }

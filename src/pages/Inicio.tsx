@@ -16,6 +16,7 @@ export function Inicio() {
   const profiles = useResource(api.profilesList);
   const sys = useResource(api.systemInfo);
   const news = useResource(api.whatsNew);
+  const guardian = useResource(api.guardianStatus);
   const latestNews = news.data?.unseen[0];
 
   const [restorePoint, setRestorePoint] = useState<boolean | null>(null);
@@ -76,6 +77,32 @@ export function Inicio() {
     <>
       <PageHeader eyebrow="Painel" title="Visão geral" subtitle="Analise o sistema e revise cada ajuste antes de aplicar." />
 
+      {guardian.data && guardian.data.length > 0 && (
+        <div className="card" role="status" style={{ borderColor: "var(--soft-border)" }}>
+          <strong>
+            O Windows desfez {guardian.data.length} {guardian.data.length === 1 ? "ajuste" : "ajustes"} que você tinha aplicado
+          </strong>
+          <p className="muted small" style={{ margin: 0 }}>
+            Costuma acontecer depois de uma grande atualização: {guardian.data.map((g) => g.name).join(", ")}.
+          </p>
+          <div>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={async () => {
+                try {
+                  setReport({ verb: "reaplicados", report: await api.guardianReapply() });
+                } catch (e) {
+                  setMessage(friendlyError(e));
+                }
+                await Promise.all([guardian.reload(), tweaks.reload()]);
+              }}
+            >
+              Reaplicar
+            </button>
+          </div>
+        </div>
+      )}
       {news.data && latestNews && (
         <div className="news-banner">
           <ReleaseCard release={latestNews} fresh />

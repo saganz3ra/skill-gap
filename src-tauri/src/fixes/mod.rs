@@ -15,6 +15,8 @@ pub enum Step {
     /// Apaga o conteúdo de C:\Windows\SoftwareDistribution\Download (com o serviço parado).
     CleanUpdateCache { label: &'static str },
     RestartExplorer { label: &'static str },
+    /// TRIM no SSD ou desfragmentação no HD, conforme o tipo do disco do sistema.
+    OptimizeSystemDrive { label: &'static str },
 }
 
 impl Step {
@@ -24,7 +26,8 @@ impl Step {
             | Step::StopService { label, .. }
             | Step::StartService { label, .. }
             | Step::CleanUpdateCache { label }
-            | Step::RestartExplorer { label } => label,
+            | Step::RestartExplorer { label }
+            | Step::OptimizeSystemDrive { label } => label,
         }
     }
 }
@@ -121,6 +124,16 @@ pub static FIXES: &[Fix] = &[
             Step::StartService { label: "Ligando o serviço de horário", name: "W32Time" },
             Step::Cmd { label: "Sincronizando", program: "w32tm", args: &["/resync", "/force"] },
         ],
+    },
+    Fix {
+        id: "optimize_disk",
+        name: "Otimizar o disco do sistema",
+        description: "TRIM no SSD ou desfragmentação no HD, com a ferramenta do próprio Windows (Optimize-Volume).",
+        when: "SSD mais lento que o normal depois de muito uso, ou HD fragmentado. O Windows já faz isso semanalmente; use se a tarefa estiver desligada.",
+        requires_admin: true,
+        restart: Restart::None,
+        duration: "de segundos (SSD) a 1 hora (HD)",
+        steps: &[Step::OptimizeSystemDrive { label: "Otimizando o disco do sistema" }],
     },
     Fix {
         id: "restart_explorer",
