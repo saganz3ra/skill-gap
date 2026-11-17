@@ -47,6 +47,8 @@ pub enum Request {
     /// Liga/desliga tarefa agendada (só as do catálogo).
     TaskEnabled { path: String, enabled: bool },
     PageCombining { enabled: bool },
+    /// Põe/tira o usuário (SID) do grupo "Usuários de log de desempenho" (para o PresentMon).
+    PerfLogGroup { sid: String, add: bool },
     /// Só LÊ onde está a cópia provisionada de um app da lista curada.
     AppxManifest { name: String },
     /// `MSISupported` de um dispositivo PCI (o auxiliar confere na listagem atual).
@@ -173,6 +175,7 @@ pub fn check(req: &Request) -> Result<(), String> {
         }
         Request::TaskEnabled { path, .. } => task_allowed(all_ops(), path),
         Request::PageCombining { .. } => true,
+        Request::PerfLogGroup { sid, .. } => sid.starts_with("S-1-5-21-") && sid.len() < 100 && sid.chars().all(|c| c.is_ascii_digit() || c == '-' || c == 'S'),
         Request::AppxManifest { name } => crate::apps::find(name).is_some(),
         Request::MsiWrite { instance_id, value } => crate::hardware::is_pci_instance(instance_id) && matches!(value, None | Some(0) | Some(1)),
         Request::QosSet { exe, .. } => crate::hardware::qos_name(exe).is_some(),
@@ -214,10 +217,21 @@ pub struct ElevationStatus {
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use windows::{call, helper_main, is_running};
+pub use windows::{call, current_user_sid, helper_main, is_running, random_hex};
 
 #[cfg(not(windows))]
 pub fn call(_req: &Request, _launch: Launch, _on_progress: impl FnMut(serde_json::Value)) -> AppResult<serde_json::Value> {
+    Err(AppError::Unsupported)
+}
+#[cfg(not(windows))]
+pub fn random_hex() -> AppResult<String> {
+    let mut buf = [0u8; 16];
+    use std::io::Read;
+    std::fs::File::open("/dev/urandom")?.read_exact(&mut buf)?;
+    Ok(buf.iter().map(|b| format!("{b:02x}")).collect())
+}
+#[cfg(not(windows))]
+pub fn current_user_sid() -> AppResult<String> {
     Err(AppError::Unsupported)
 }
 #[cfg(not(windows))]

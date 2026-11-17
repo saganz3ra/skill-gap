@@ -1,6 +1,8 @@
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ThemeProvider } from "./hooks/theme";
+import { OverlayWindow } from "./components/Overlay";
 import { Layout } from "./components/Layout";
 import { Inicio } from "./pages/Inicio";
 import { Limpeza } from "./pages/Limpeza";
@@ -20,6 +22,8 @@ import { Hardware } from "./pages/Hardware";
 // MemoryRouter: num app desktop não existe barra de endereço, então a rota fica só
 // em memória. Evita 404 ao recarregar uma rota interna no build de produção.
 export default function App() {
+  // A janela "overlay" usa o mesmo index.html, mas só mostra o painel transparente.
+  if (getCurrentWindow().label === "overlay") return <OverlayWindow />;
   return (
     <ThemeProvider>
       <MemoryRouter>
