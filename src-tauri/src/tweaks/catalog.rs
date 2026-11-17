@@ -951,6 +951,17 @@ pub static TWEAKS: &[Tweak] = &[
         &[Op::Net { key: NetKey::PacketCoalescing, value: "Disabled" }],
     ),
     tw(
+        "tcp_autotuning_restricted",
+        "Autotuning TCP restrito (bufferbloat)",
+        "Limita o quanto a janela de recepção TCP cresce no perfil Internet.",
+        "Pode reduzir o 'bufferbloat' (ping que dispara quando alguém baixa algo) em conexões com fila grande no roteador. Teste com e sem: em links rápidos, downloads grandes podem ficar mais lentos.",
+        Category::Rede,
+        Impact::Small,
+        Restart::None,
+        &[Op::Net { key: NetKey::TcpAutotuning, value: "Restricted" }],
+    )
+    .risk(Risk::Medium, "Downloads grandes podem ficar mais lentos em conexões rápidas."),
+    tw(
         "prefer_ipv4",
         "Preferir IPv4 ao IPv6",
         "Quando um site tem os dois, o Windows usa IPv4 primeiro (sem desligar o IPv6).",
