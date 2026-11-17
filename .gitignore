@@ -1,0 +1,16 @@
+node_modules
+dist
+src-tauri/target
+src-tauri/gen/schemas
+*.log
+.DS_Store
+
+# Editor / SO
+.vscode/*
+!.vscode/extensions.json
+.idea
+Thumbs.db
+
+# Segredos
+.env
+.env.*
