@@ -1,0 +1,58 @@
+# Gera o instalador e cria uma Release (rascunho) quando você envia uma tag de versão:
+#   git tag v0.2.0 && git push origin v0.2.0
+# A tag precisa bater com "version" do src-tauri/tauri.conf.json.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # criar a Release e anexar o instalador
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag confere com a versão do app
+        shell: pwsh
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ("v$version" -ne "${{ github.ref_name }}") {
+            Write-Error "A tag ${{ github.ref_name }} não bate com a versão $version do tauri.conf.json"
+            exit 1
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Dependências do front
+        run: npm ci
+
+      - name: Testes antes de publicar
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build e Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Skill Gap ${{ github.ref_name }}"
+          releaseBody: |
+            Instalador para Windows 10/11 (64 bits): baixe o arquivo `*_x64-setup.exe` abaixo.
+
+            O executável ainda não tem assinatura de código: o Windows pode mostrar
+            "O Windows protegeu o seu computador". Clique em *Mais informações → Executar assim mesmo*.
+          releaseDraft: true
+          prerelease: false
