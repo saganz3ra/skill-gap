@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { api, CLEANUP_INFO, PLAN_INFO, type BatchReport, type RestoreOutcome } from "../lib/api";
+import { api, skippedByProfiles, CLEANUP_INFO, PLAN_INFO, type BatchReport, type RestoreOutcome } from "../lib/api";
 import { formatBytes } from "../lib/format";
 import { useResource } from "../hooks/useResource";
 import { PageHeader } from "../components/ui";
@@ -29,7 +29,7 @@ export function Inicio() {
   const target = useMemo(() => {
     if (!recommended || !tweaks.data) return [];
     const byId = new Map(tweaks.data.map((t) => [t.id, t]));
-    return recommended.tweaks.map((id) => byId.get(id)).filter((t) => t && !(sys.data?.isLaptop && t.laptopUnsafe));
+    return recommended.tweaks.map((id) => byId.get(id)).filter((t) => t && !skippedByProfiles(t));
   }, [recommended, tweaks.data, sys.data]);
   const done = target.filter((t) => t?.state === "active").length;
   const pct = target.length ? Math.round((done / target.length) * 100) : 0;

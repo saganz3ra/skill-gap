@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 
-import { api, type BatchReport, type RestoreOutcome, type ProfileView, type SystemInfo } from "../lib/api";
+import { api, skippedByProfiles, type BatchReport, type RestoreOutcome, type ProfileView, type SystemInfo } from "../lib/api";
 import { useResource } from "../hooks/useResource";
 import { PageHeader } from "../components/ui";
 import { BatchSummary, friendlyError, RestoreNotice } from "../components/feedback";
@@ -23,10 +23,20 @@ export function Perfis() {
     () => new Set((tweaks.data ?? []).filter((t) => t.state === "active").map((t) => t.id)),
     [tweaks.data],
   );
-  const laptopSkip = useMemo(
-    () => new Set(sys.data?.isLaptop ? (tweaks.data ?? []).filter((t) => t.laptopUnsafe).map((t) => t.id) : []),
-    [tweaks.data, sys.data],
-  );
+  // Mesma regra do backend: perfis pulam o que não serve pra este PC, esquenta ou é de risco alto.
+  const profileSkip = useMemo(() => new Set((tweaks.data ?? []).filter(skippedByProfiles).map((t) => t.id)), [tweaks.data]);
+  const [rescanning, setRescanning] = useState(false);
+  async function rescan() {
+    setRescanning(true);
+    try {
+      sys.setData(await api.systemInfoRefresh());
+      await tweaks.reload();
+    } catch (e) {
+      setMessage(friendlyError(e));
+    } finally {
+      setRescanning(false);
+    }
+  }
   // Ponto de restauração exige admin: marcado por padrão só quando dá pra criar.
   const wantsRestore = restorePoint ?? true;
   const recommended = sys.data?.recommendedProfile;
@@ -76,7 +86,13 @@ export function Perfis() {
           <h2 id="seu-pc" className="card-title">
             Perfil para o seu PC
           </h2>
-          {sys.loading && <span className="muted small">Analisando…</span>}
+          {sys.loading || rescanning ? (
+            <span className="muted small">Analisando…</span>
+          ) : (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={rescan} title="Lê de novo o hardware (ex.: trocou o disco ou a memória)">
+              Reanalisar
+            </button>
+          )}
         </div>
         {sys.data && (
           <>
@@ -98,6 +114,15 @@ export function Perfis() {
               <div>
                 <dt>Disco do sistema</dt>
                 <dd>{DISK_LABEL[sys.data.systemDisk]}</dd>
+              </div>
+              <div>
+                <dt>Monitor principal</dt>
+                <dd>
+                  {sys.data.displayHz ? `${sys.data.displayHz} Hz` : "—"}
+                  {sys.data.maxDisplayHz && sys.data.displayHz && sys.data.maxDisplayHz > sys.data.displayHz && (
+                    <span className="muted small"> (aceita até {sys.data.maxDisplayHz} Hz)</span>
+                  )}
+                </dd>
               </div>
               <div>
                 <dt>Executando como</dt>
@@ -128,7 +153,7 @@ export function Perfis() {
 
       <div className="tweak-grid">
         {sorted.map((p) => {
-          const missing = p.tweaks.filter((id) => !active.has(id) && !laptopSkip.has(id)).length;
+          const missing = p.tweaks.filter((id) => !active.has(id) && !profileSkip.has(id)).length;
           return (
             <article key={p.id} className={`tweak-card${p.id === recommended ? " tweak-on" : ""}`}>
               <div className="tweak-head">

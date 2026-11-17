@@ -24,7 +24,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, AppResult};
-use catalog::{Category, Impact, Restart, Tweak, PROFILES, TWEAKS};
+use crate::system::SystemProfile;
+use catalog::{Category, Gate, Impact, Restart, Risk, Tweak, PROFILES, TWEAKS};
 use ops::{Snap, Sys};
 
 // ---------------- Dados persistidos ----------------
@@ -78,7 +79,11 @@ pub struct TweakView {
     pub impact: Impact,
     pub restart: Restart,
     pub requires_admin: bool,
-    pub laptop_unsafe: bool,
+    pub risk: Risk,
+    pub breaks: Option<&'static str>,
+    pub heats: bool,
+    /// Se serve para ESTE PC (calculado aqui: o front só exibe).
+    pub gate: Gate,
     pub state: TweakState,
     pub can_revert: bool,
     pub favorite: bool,
@@ -101,12 +106,19 @@ pub struct Failure {
     pub error: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Skipped {
+    pub id: String,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BatchReport {
     pub applied: Vec<String>,
-    /// Pulados de propósito (ex.: ajuste que esquenta, num notebook).
-    pub skipped: Vec<String>,
+    /// Pulados de propósito, com o motivo (ex.: esquenta, exige Windows 11).
+    pub skipped: Vec<Skipped>,
     pub failed: Vec<Failure>,
     /// A reinicialização mais pesada exigida pelo que foi aplicado.
     pub restart: Restart,
@@ -173,7 +185,7 @@ impl TweakEngine {
         Ok((self.state(tweak), can_revert))
     }
 
-    pub fn list(&self) -> Vec<TweakView> {
+    pub fn list(&self, sys: &SystemProfile) -> Vec<TweakView> {
         let store = self.lock().clone();
         TWEAKS
             .iter()
@@ -186,7 +198,10 @@ impl TweakEngine {
                 impact: t.impact,
                 restart: t.restart,
                 requires_admin: t.requires_admin(),
-                laptop_unsafe: t.laptop_unsafe,
+                risk: t.risk,
+                breaks: t.breaks,
+                heats: t.heats,
+                gate: catalog::gate(t, sys),
                 state: self.state(t),
                 can_revert: store.snapshots.contains_key(t.id),
                 favorite: store.favorites.contains(t.id),
@@ -194,6 +209,13 @@ impl TweakEngine {
             .collect()
     }
 
+    /// Aplicar pedido pelo usuário: confere requisitos e confirmação de risco alto ANTES.
+    pub fn apply_checked(&self, id: &str, sys: &SystemProfile, confirmed: bool) -> AppResult<()> {
+        catalog::check_apply(find(id)?, sys, confirmed)?;
+        self.apply(id)
+    }
+
+    /// Núcleo do aplicar, sem as checagens de requisito (usado depois delas).
     pub fn apply(&self, id: &str) -> AppResult<()> {
         let tweak = find(id)?;
         if self.state(tweak) == TweakState::Active {
@@ -318,13 +340,14 @@ impl TweakEngine {
             .ok_or_else(|| AppError::NotFound(format!("perfil {id}")))
     }
 
-    /// Aplica um perfil. Em notebook pula os ajustes que esquentam.
-    pub fn apply_profile(&self, id: &str, is_laptop: bool) -> AppResult<BatchReport> {
+    /// Aplica um perfil (aplicar em um clique). Pula, com o motivo, o que não serve pra
+    /// este PC, o que esquenta e o que tem risco alto.
+    pub fn apply_profile(&self, id: &str, sys: &SystemProfile) -> AppResult<BatchReport> {
         let mut report = BatchReport { applied: vec![], skipped: vec![], failed: vec![], restart: Restart::None };
         for tid in self.profile_tweaks(id)? {
             let Some(t) = catalog::find(&tid) else { continue };
-            if is_laptop && t.laptop_unsafe {
-                report.skipped.push(tid);
+            if let Some(reason) = catalog::profile_skip_reason(t, sys) {
+                report.skipped.push(Skipped { id: tid, reason });
                 continue;
             }
             if self.state(t) == TweakState::Active {
@@ -496,7 +519,7 @@ mod tests {
     }
 
     fn view(e: &TweakEngine, id: &str) -> TweakView {
-        e.list().into_iter().find(|t| t.id == id).unwrap()
+        e.list(&desktop()).into_iter().find(|t| t.id == id).unwrap()
     }
 
     #[test]
@@ -589,13 +612,43 @@ mod tests {
         assert!(fake.memory_compression().unwrap());
     }
 
+    fn desktop() -> SystemProfile {
+        SystemProfile { windows: String::new(), build: 26100, is_laptop: false, ram_gb: 32, system_disk: crate::system::DiskKind::Ssd }
+    }
+
     #[test]
-    fn perfil_em_notebook_pula_o_que_esquenta() {
-        let (e, _, _fake) = engine("laptop");
-        let r = e.apply_profile("competitivo", true).unwrap();
-        assert!(r.skipped.contains(&"power_high".to_string()));
-        assert!(!r.applied.contains(&"power_high".to_string()));
+    fn perfil_pronto_aplica_e_pede_reinicio() {
+        let (e, _, _fake) = engine("builtin");
+        let r = e.apply_profile("competitivo", &desktop()).unwrap();
+        assert!(r.skipped.is_empty(), "{:?}", r.skipped);
+        assert!(r.applied.contains(&"hags".to_string()));
         assert_eq!(r.restart, Restart::Reboot, "HAGS exige reiniciar");
+    }
+
+    #[test]
+    fn perfil_salvo_pula_o_que_esquenta_com_motivo() {
+        let (e, _, _fake) = engine("heats");
+        e.apply("game_mode").unwrap();
+        e.apply("power_high").unwrap();
+        let p = e.save_profile("Meu").unwrap();
+        e.revert_all();
+        let r = e.apply_profile(&p.id, &desktop()).unwrap();
+        assert_eq!(r.applied, vec!["game_mode".to_string()]);
+        assert_eq!(r.skipped.len(), 1);
+        assert_eq!(r.skipped[0].id, "power_high");
+        assert!(r.skipped[0].reason.contains("calor"));
+        // À mão, com o aviso, continua possível.
+        e.apply_checked("power_high", &desktop(), false).unwrap();
+    }
+
+    #[test]
+    fn notebook_mostra_aviso_e_desfazer_nunca_e_bloqueado() {
+        let (e, _, _fake) = engine("gate");
+        let laptop = SystemProfile { is_laptop: true, ..desktop() };
+        let v = e.list(&laptop).into_iter().find(|v| v.id == "power_high").unwrap();
+        assert!(matches!(v.gate, Gate::Warn(_)));
+        e.apply_checked("power_high", &laptop, false).unwrap();
+        e.revert("power_high").unwrap();
     }
 
     #[test]

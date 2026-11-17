@@ -122,14 +122,25 @@ export interface TweakView {
   description: string;
   details: string;
   category: TweakCategory;
-  impact: "real" | "small";
+  impact: "small" | "medium" | "high";
   restart: Restart;
   requiresAdmin: boolean;
-  laptopUnsafe: boolean;
+  risk: "low" | "medium" | "high";
+  /** O que pode parar de funcionar (sempre presente em risco médio/alto). */
+  breaks: string | null;
+  /** Aumenta calor e consumo: fica fora dos perfis. */
+  heats: boolean;
+  /** Se serve para este PC (calculado no backend). Indisponível nunca bloqueia o desfazer. */
+  gate: Gate;
   state: "active" | "inactive" | "partial" | "unknown";
   canRevert: boolean;
   favorite: boolean;
 }
+
+export type Gate = { status: "ok" } | { status: "warn"; reason: string } | { status: "unavailable"; reason: string };
+
+/** Mesma regra do backend (`profile_skip_reason`): o que um perfil pula. */
+export const skippedByProfiles = (t: TweakView) => t.gate.status !== "ok" || t.heats || t.risk === "high";
 
 export interface ProfileView {
   id: string;
@@ -153,7 +164,7 @@ export interface ProfileApplyResult {
 
 export interface BatchReport {
   applied: string[];
-  skipped: string[];
+  skipped: { id: string; reason: string }[];
   failed: { id: string; error: string }[];
   restart: Restart;
 }
@@ -167,6 +178,8 @@ export interface SystemInfo {
   isAdmin: boolean;
   recommendedProfile: string;
   reason: string;
+  displayHz: number | null;
+  maxDisplayHz: number | null;
 }
 
 export const CATEGORY_LABEL: Record<TweakCategory, string> = {
@@ -300,6 +313,8 @@ export type AppErrorKind =
   | "notFound"
   | "invalidInput"
   | "commandFailed"
+  | "unavailable"
+  | "confirmationRequired"
   | "unsupported"
   | "io";
 
@@ -346,7 +361,7 @@ export const api = {
   onGameSession: (cb: (s: WatchStatus) => void): Promise<UnlistenFn> =>
     listen<WatchStatus>("game-session", (e) => cb(e.payload)),
   tweaksList: () => invoke<TweakView[]>("tweaks_list"),
-  tweakApply: (id: string) => invoke<void>("tweak_apply", { id }),
+  tweakApply: (id: string, confirmed = false) => invoke<void>("tweak_apply", { id, confirmed }),
   tweakRevert: (id: string) => invoke<void>("tweak_revert", { id }),
   tweaksRevertAll: () => invoke<BatchReport>("tweaks_revert_all"),
   tweakSetFavorite: (id: string, favorite: boolean) => invoke<void>("tweak_set_favorite", { id, favorite }),
@@ -354,7 +369,8 @@ export const api = {
   profileApply: (id: string, restorePoint: boolean) => invoke<ProfileApplyResult>("profile_apply", { id, restorePoint }),
   profileSave: (name: string) => invoke<ProfileView>("profile_save", { name }),
   profileDelete: (id: string) => invoke<void>("profile_delete", { id }),
-  systemInfo: () => invoke<SystemInfo>("system_info"),
+  systemInfo: () => invoke<SystemInfo>("system_info", { refresh: false }),
+  systemInfoRefresh: () => invoke<SystemInfo>("system_info", { refresh: true }),
   createRestorePoint: () => invoke<RestoreOutcome>("create_restore_point"),
   openSystemProtection: () => invoke<void>("open_system_protection"),
   restartExplorer: () => invoke<void>("restart_explorer"),

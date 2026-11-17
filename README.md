@@ -125,6 +125,15 @@ cd src-tauri
 cargo test      # 74 testes (inclui a política do auxiliar elevado): motor de ajustes, perfis, limpeza, Modo Jogo, monitor, drivers, correções, planos de energia, log de boot, apps de fábrica
 ```
 
+## Regras do catálogo de ajustes
+
+Conferidas por testes em `tweaks/catalog.rs`:
+
+- **Requisitos declarativos** (`requires`): build mínimo, RAM mínima, SSD, só desktop. O backend calcula um `gate` por ajuste (`ok` / `warn` / `unavailable`) e o front só exibe. Indisponível bloqueia **aplicar**, nunca **desfazer**. Quando não deu pra ler o hardware, o resultado é aviso, não bloqueio.
+- **Risco** separado de **impacto**: risco médio/alto exige `breaks` (o que pode parar de funcionar); risco alto exige confirmação, conferida no backend.
+- **`heats`** (mais calor/consumo) e **risco alto** nunca entram em perfil; o perfil pula e diz o motivo.
+- **Nenhum destino escrito por dois ajustes** (mesmo com o mesmo valor): desfazer um apagaria o outro.
+
 ## Versões e instalador
 
 O GitHub gera o instalador sozinho (`.github/workflows/release.yml`):
