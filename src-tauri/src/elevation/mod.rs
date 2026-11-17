@@ -23,7 +23,7 @@ use crate::cleanup::CleanupCategory;
 use crate::error::{AppError, AppResult};
 use crate::startup::{parse_id, StartupSource};
 use crate::tweaks::catalog::TWEAKS;
-use crate::tweaks::ops::{service_path, Hive, Op};
+use crate::tweaks::ops::{Hive, Op};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase")]
@@ -128,8 +128,19 @@ fn task_allowed<'a>(mut ops: impl Iterator<Item = &'a Op>, path: &str) -> bool {
     ops.any(|op| matches!(*op, Op::ScheduledTaskOff { path: p } if p.eq_ignore_ascii_case(path)))
 }
 
+/// Serviços que o app pode mexer: os do Modo Jogo/Correções e os de `Op::Service` do catálogo.
 fn service_allowed(name: &str) -> bool {
     ALLOWED_SERVICES.iter().any(|s| s.eq_ignore_ascii_case(name))
+        || all_ops().any(|op| matches!(*op, Op::Service { name: n, .. } if n.eq_ignore_ascii_case(name)))
+}
+
+/// `Services\<nome>\Start` ou `DelayedAutostart` de um serviço permitido.
+fn service_value_allowed(path: &str, name: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    let Some(svc) = lower.strip_prefix(r"system\currentcontrolset\services\") else { return false };
+    !svc.contains('\\')
+        && (name.eq_ignore_ascii_case("Start") || name.eq_ignore_ascii_case("DelayedAutostart"))
+        && service_allowed(svc)
 }
 
 /// Confere um pedido ANTES de executar. É a única porta de entrada do auxiliar.
@@ -138,7 +149,7 @@ pub fn check(req: &Request) -> Result<(), String> {
         Request::SetDword { path, name, .. } => {
             catalog_allows(path, name, false)
                 || (is_ifeo_perf_key(path) && name.eq_ignore_ascii_case("CpuPriorityClass"))
-                || (name.eq_ignore_ascii_case("Start") && ALLOWED_SERVICES.iter().any(|s| service_path(s).eq_ignore_ascii_case(path)))
+                || service_value_allowed(path, name)
         }
         Request::SetString { path, name, .. } => catalog_allows(path, name, true),
         Request::DeleteKeyTree { path } => is_ifeo_perf_key(path),
@@ -244,6 +255,7 @@ pub fn unit(_: serde_json::Value) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tweaks::ops::service_path;
 
     fn dword(path: &str, name: &str) -> Request {
         Request::SetDword { path: path.into(), name: name.into(), value: Some(1) }
@@ -278,6 +290,11 @@ mod tests {
         assert!(check(&Request::StopService { name: "WinDefend".into() }).is_err());
         assert!(check(&dword(&service_path("SysMain"), "Start")).is_ok());
         assert!(check(&dword(&service_path("WinDefend"), "Start")).is_err());
+        assert!(check(&dword(&service_path("DiagTrack"), "Start")).is_ok(), "serviço do catálogo");
+        assert!(check(&dword(&service_path("DiagTrack"), "DelayedAutostart")).is_ok());
+        assert!(check(&dword(&service_path("DiagTrack"), "ImagePath")).is_err());
+        assert!(check(&dword(&format!(r"{}\Parameters", service_path("DiagTrack")), "Start")).is_err());
+        assert!(check(&Request::StopService { name: "DiagTrack".into() }).is_ok());
         assert!(check(&Request::SetStartupApproved { id: "machineRun::RtkAudUService".into(), enabled: false }).is_ok());
         assert!(check(&Request::SetStartupApproved { id: "userRun::Steam".into(), enabled: false }).is_err(), "HKCU não precisa de admin");
     }

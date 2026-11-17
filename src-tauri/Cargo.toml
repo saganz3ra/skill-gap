@@ -1,6 +1,6 @@
 [package]
 name = "skill-gap"
-version = "0.2.0"
+version = "0.3.0"
 description = "Otimizador de PC para Windows"
 edition = "2021"
 rust-version = "1.77"

@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.3.0",
+    "date": null,
+    "items": [
+      {
+        "kind": "novo",
+        "text": "Catálogo ampliado de 21 para mais de 80 ajustes: energia dentro do plano ativo (EPP, estado mínimo, core parking, PCIe, USB, disco), MMCSS, MPO, otimizações de jogos em janela, tela cheia exclusiva, drivers fora do Windows Update, teclado, rede, privacidade, aparência e Discord."
+      },
+      {
+        "kind": "novo",
+        "text": "Ajustes que dependem do seu PC (opção de energia, tarefa agendada, configuração de rede, app instalado) aparecem como indisponíveis, com o motivo, quando o Windows não tem o recurso."
+      },
+      {
+        "kind": "melhoria",
+        "text": "Perfis revistos: Equilibrado só com risco baixo e sem mudanças visuais; Streamer sem nada que tire CPU do OBS ou quebre o overlay; Privacidade mais completo."
+      },
+      {
+        "kind": "melhoria",
+        "text": "Serviços guardam também o início atrasado, e o desfazer de configurações de energia volta no mesmo plano em que foi feito."
+      }
+    ]
+  },
+  {
     "version": "0.2.0",
     "date": "2026-11-17",
     "items": [
