@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { api, type ElevationStatus } from "../lib/api";
+import { api, NEWS_SEEN_EVENT, type ElevationStatus, type WhatsNew } from "../lib/api";
 import {
   Activity,
   BatteryCharging,
@@ -79,6 +79,7 @@ export function Layout() {
 
         <div className="sidebar-spacer" />
         <AdminChip />
+        <NewsLink />
         <div className="restore-note">
           <ShieldCheck size={16} aria-hidden="true" />
           <span>Ajustes podem ser desfeitos na própria tela. A limpeza sempre pede confirmação.</span>
@@ -124,5 +125,24 @@ function AdminChip() {
       <span className="admin-dot" aria-hidden="true" />
       {status.isAdmin ? "Aberto como admin" : status.helperRunning ? "Admin liberado" : "Admin sob demanda"}
     </div>
+  );
+}
+
+/** Versão atual + ponto quando há novidade não vista. */
+function NewsLink() {
+  const [news, setNews] = useState<WhatsNew>();
+  useEffect(() => {
+    const load = () => void api.whatsNew().then(setNews).catch(() => undefined);
+    load();
+    window.addEventListener(NEWS_SEEN_EVENT, load);
+    return () => window.removeEventListener(NEWS_SEEN_EVENT, load);
+  }, []);
+  if (!news) return null;
+  const pending = news.unseen.length > 0;
+  return (
+    <NavLink to="/novidades" className="news-link" title="O que mudou em cada versão">
+      <span>Versão {news.current} · Novidades</span>
+      {pending && <span className="news-dot" aria-label="há novidades" />}
+    </NavLink>
   );
 }
