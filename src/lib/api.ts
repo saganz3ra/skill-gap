@@ -166,6 +166,32 @@ export const NEWS_KIND: Record<NewsKind, [string, string]> = {
 /** Disparado quando as novidades são marcadas como vistas (a barra lateral escuta). */
 export const NEWS_SEEN_EVENT = "skillgap:news-seen";
 
+/** IP/DNS digitados à mão num adaptador (o que o "Resetar a rede" apaga). */
+export interface AdapterConfig {
+  guid: string;
+  name: string;
+  ipv4: { addresses: [string, string][]; gateways: string[] } | null;
+  dns4: string[];
+  dns6: string[];
+}
+
+export interface NetResetStatus {
+  /** Reset feito e o PC ainda não reiniciou. */
+  needsReboot: boolean;
+  pending: { takenAt: number; bootAt: number; adapters: AdapterConfig[] } | null;
+  /** O que o PC tem de fixo agora. */
+  current: AdapterConfig[];
+}
+
+/** "Ethernet: IP 192.168.1.50 · DNS 1.1.1.1, 8.8.8.8" */
+export function describeAdapter(a: AdapterConfig): string {
+  const parts: string[] = [];
+  if (a.ipv4) parts.push(`IP fixo ${a.ipv4.addresses.map(([ip]) => ip).join(", ")}`);
+  const dns = [...a.dns4, ...a.dns6];
+  if (dns.length) parts.push(`DNS ${dns.join(", ")}`);
+  return `${a.name}: ${parts.join(" · ")}`;
+}
+
 export type Gate = { status: "ok" } | { status: "warn"; reason: string } | { status: "unavailable"; reason: string };
 
 /** Mesma regra do backend (`profile_skip_reason`): o que um perfil pula. */
@@ -411,6 +437,9 @@ export const api = {
   openBackupFolder: () => invoke<void>("open_backup_folder"),
   fixesList: () => invoke<FixView[]>("fixes_list"),
   fixRun: (id: string) => invoke<FixReport>("fix_run", { id }),
+  netResetStatus: () => invoke<NetResetStatus>("net_reset_status"),
+  netRestore: () => invoke<void>("net_restore"),
+  netDiscard: () => invoke<void>("net_discard"),
   onFixProgress: (cb: (p: FixProgress) => void): Promise<UnlistenFn> =>
     listen<FixProgress>("fix-progress", (e) => cb(e.payload)),
   energyStatus: () => invoke<EnergyStatus>("energy_status"),

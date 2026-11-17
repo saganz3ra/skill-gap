@@ -7,6 +7,7 @@ mod error;
 mod fixes;
 mod gaming;
 mod monitor;
+mod netcfg;
 mod news;
 mod power;
 mod restore;
@@ -324,6 +325,12 @@ async fn fix_run(app: tauri::AppHandle, id: String) -> AppResult<serde_json::Val
     }
     let handle = app.clone();
     let result = blocking(move || {
+        if fix.id == "network_reset" {
+            // Anota antes de mexer: IP/DNS fixos de cada adaptador vão pro diário. Recusa
+            // um segundo reset antes de reiniciar (apagaria a foto boa).
+            let net = handle.state::<netcfg::NetState>();
+            net.before_reset(netcfg::boot_at(), restore::now(), netcfg::read_static())?;
+        }
         if fix.requires_admin && !system::is_admin() {
             // Roda no auxiliar elevado; o progresso volta pelo pipe e é repassado à tela.
             elevation::call(&elevation::Request::RunFix { id: fix.id.to_string() }, elevation::Launch::OnDemand, |p| {
@@ -339,6 +346,36 @@ async fn fix_run(app: tauri::AppHandle, id: String) -> AppResult<serde_json::Val
     .await;
     app.state::<FixLock>().0.store(false, Ordering::SeqCst);
     result
+}
+
+#[tauri::command]
+async fn net_reset_status(app: tauri::AppHandle) -> AppResult<netcfg::ResetStatus> {
+    blocking(move || Ok(app.state::<netcfg::NetState>().status(netcfg::boot_at(), netcfg::read_static()))).await
+}
+
+/// Recoloca o IP/DNS fixo que o reset apagou (auxiliar elevado quando preciso).
+#[tauri::command]
+async fn net_restore(app: tauri::AppHandle) -> AppResult<()> {
+    blocking(move || {
+        let net = app.state::<netcfg::NetState>();
+        if net.status(netcfg::boot_at(), vec![]).needs_reboot {
+            return Err(AppError::InvalidInput("reinicie o PC primeiro: o reset de rede só termina depois do reinício".into()));
+        }
+        net.restore(|a| {
+            elevation::admin_or_elevated(
+                || netcfg::apply(a),
+                elevation::Request::RestoreNetwork { adapter: a.clone() },
+                |_| {},
+                elevation::unit,
+            )
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+async fn net_discard(app: tauri::AppHandle) -> AppResult<()> {
+    blocking(move || app.state::<netcfg::NetState>().discard()).await
 }
 
 // ---------------- Energia, boot e apps de fábrica ----------------
@@ -419,6 +456,7 @@ pub fn run() {
             app.manage(power::plans::EnergyState::load(dir.join("energia.json")));
             app.manage(restore::RestoreState::load(dir.join("ponto-restauracao.json")));
             app.manage(news::NewsState::load(dir.join("novidades.json")));
+            app.manage(netcfg::NetState::load(dir.join("rede-antes-do-reset.json")));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -463,7 +501,10 @@ pub fn run() {
             bloat_remove,
             elevation_status,
             whats_new,
-            whats_new_seen
+            whats_new_seen,
+            net_reset_status,
+            net_restore,
+            net_discard
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Skill Gap");
