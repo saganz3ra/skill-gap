@@ -9,6 +9,8 @@
 //! disponível ao abrir o app de novo.
 
 pub mod catalog;
+pub mod jsonfile;
+pub mod net;
 pub mod ops;
 #[cfg(windows)]
 pub mod elevated;
@@ -136,6 +138,18 @@ fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
+/// Motivo legível de "indisponível" vindo do próprio Windows.
+fn unsupported_reason(t: &Tweak) -> String {
+    let op = t.ops.iter().find(|op| !matches!(op, ops::Op::Dword { .. } | ops::Op::Str { .. }));
+    match op {
+        Some(ops::Op::PowerSetting { .. }) => "este PC não tem essa opção de energia".into(),
+        Some(ops::Op::ScheduledTaskOff { .. }) => "a tarefa não existe neste Windows".into(),
+        Some(ops::Op::Net { .. }) => "este Windows não tem essa configuração de rede".into(),
+        Some(ops::Op::JsonFileKey { .. }) => "o app não está instalado (ou nunca foi aberto)".into(),
+        _ => "este PC não tem o que o ajuste precisa".into(),
+    }
+}
+
 fn find(id: &str) -> AppResult<&'static Tweak> {
     catalog::find(id).ok_or_else(|| AppError::NotFound(format!("ajuste {id}")))
 }
@@ -201,7 +215,7 @@ impl TweakEngine {
                 risk: t.risk,
                 breaks: t.breaks,
                 heats: t.heats,
-                gate: catalog::gate(t, sys),
+                gate: self.gate(t, sys),
                 state: self.state(t),
                 can_revert: store.snapshots.contains_key(t.id),
                 favorite: store.favorites.contains(t.id),
@@ -209,9 +223,23 @@ impl TweakEngine {
             .collect()
     }
 
+    /// Requisitos do catálogo + o que só dá pra saber perguntando ao Windows (a opção
+    /// de energia existe? a tarefa existe? o app está instalado?).
+    fn gate(&self, t: &Tweak, sys: &SystemProfile) -> Gate {
+        match catalog::gate(t, sys) {
+            Gate::Unavailable(r) => Gate::Unavailable(r),
+            other if t.ops.iter().all(|op| ops::supported(self.sys.as_ref(), op)) => other,
+            _ => Gate::Unavailable(unsupported_reason(t)),
+        }
+    }
+
     /// Aplicar pedido pelo usuário: confere requisitos e confirmação de risco alto ANTES.
     pub fn apply_checked(&self, id: &str, sys: &SystemProfile, confirmed: bool) -> AppResult<()> {
-        catalog::check_apply(find(id)?, sys, confirmed)?;
+        let t = find(id)?;
+        catalog::check_apply(t, sys, confirmed)?;
+        if let Gate::Unavailable(r) = self.gate(t, sys) {
+            return Err(AppError::Unavailable(r));
+        }
         self.apply(id)
     }
 
@@ -346,7 +374,11 @@ impl TweakEngine {
         let mut report = BatchReport { applied: vec![], skipped: vec![], failed: vec![], restart: Restart::None };
         for tid in self.profile_tweaks(id)? {
             let Some(t) = catalog::find(&tid) else { continue };
-            if let Some(reason) = catalog::profile_skip_reason(t, sys) {
+            let unsupported = match self.gate(t, sys) {
+                Gate::Unavailable(r) => Some(r),
+                _ => None,
+            };
+            if let Some(reason) = unsupported.or_else(|| catalog::profile_skip_reason(t, sys)) {
                 report.skipped.push(Skipped { id: tid, reason });
                 continue;
             }
@@ -497,6 +529,39 @@ impl Sys for NoSys {
         Err(AppError::Unsupported)
     }
     fn set_memory_compression(&self, _: bool) -> AppResult<()> {
+        Err(AppError::Unsupported)
+    }
+    fn power_value(&self, _: &str, _: &str) -> AppResult<Option<(String, u32)>> {
+        Ok(None)
+    }
+    fn set_power_value(&self, _: &str, _: &str, _: &str, _: u32) -> AppResult<()> {
+        Err(AppError::Unsupported)
+    }
+    fn task_enabled(&self, _: &str) -> Option<bool> {
+        None
+    }
+    fn set_task_enabled(&self, _: &str, _: bool) -> AppResult<()> {
+        Err(AppError::Unsupported)
+    }
+    fn page_combining(&self) -> AppResult<bool> {
+        Err(AppError::Unsupported)
+    }
+    fn set_page_combining(&self, _: bool) -> AppResult<()> {
+        Err(AppError::Unsupported)
+    }
+    fn net_setting(&self, _: ops::NetKey) -> AppResult<String> {
+        Err(AppError::Unsupported)
+    }
+    fn set_net_setting(&self, _: ops::NetKey, _: &str) -> AppResult<()> {
+        Err(AppError::Unsupported)
+    }
+    fn json_file_exists(&self, _: &str, _: &str) -> bool {
+        false
+    }
+    fn json_key(&self, _: &str, _: &str, _: &str) -> AppResult<Option<String>> {
+        Err(AppError::Unsupported)
+    }
+    fn set_json_key(&self, _: &str, _: &str, _: &str, _: Option<&str>) -> AppResult<()> {
         Err(AppError::Unsupported)
     }
 }
