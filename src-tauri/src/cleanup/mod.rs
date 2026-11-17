@@ -25,20 +25,32 @@ pub enum CleanupCategory {
     WindowsUpdateCache,
     ShaderCache,
     RecycleBin,
+    /// Cache do Chrome, Edge, Brave e Firefox (só com o navegador fechado).
+    BrowserCache,
+    /// Relatórios de travamento de apps (CrashDumps e WER do usuário).
+    CrashDumps,
+    /// Minidumps de tela azul (pasta do Windows).
+    SystemDumps,
+    /// Cache de miniaturas e ícones do Explorador.
+    ThumbnailCache,
 }
 
 impl CleanupCategory {
-    pub const ALL: [CleanupCategory; 5] = [
+    pub const ALL: [CleanupCategory; 9] = [
         CleanupCategory::UserTemp,
         CleanupCategory::WindowsTemp,
         CleanupCategory::WindowsUpdateCache,
         CleanupCategory::ShaderCache,
         CleanupCategory::RecycleBin,
+        CleanupCategory::BrowserCache,
+        CleanupCategory::CrashDumps,
+        CleanupCategory::SystemDumps,
+        CleanupCategory::ThumbnailCache,
     ];
 
     /// Pastas do sistema: sem admin a leitura/remoção é negada.
     pub const fn requires_admin(self) -> bool {
-        matches!(self, CleanupCategory::WindowsTemp | CleanupCategory::WindowsUpdateCache)
+        matches!(self, CleanupCategory::WindowsTemp | CleanupCategory::WindowsUpdateCache | CleanupCategory::SystemDumps)
     }
 
     /// Arquivos mais novos que isso ficam. Instaladores e apps abertos usam o TEMP
@@ -92,10 +104,14 @@ pub struct CleanupReport {
 // ---------------- Plataforma ----------------
 
 #[cfg(windows)]
-use windows::{folder, recycle_bin_empty, recycle_bin_query, system_drive_free};
+use windows::{blocked_by, folders, recycle_bin_empty, recycle_bin_query, system_drive_free};
 
 #[cfg(not(windows))]
-fn folder(_c: CleanupCategory) -> Option<std::path::PathBuf> {
+fn folders(_c: CleanupCategory) -> Vec<std::path::PathBuf> {
+    Vec::new()
+}
+#[cfg(not(windows))]
+fn blocked_by(_c: CleanupCategory) -> Option<&'static str> {
     None
 }
 #[cfg(not(windows))]
@@ -134,16 +150,19 @@ fn scan_one(category: CleanupCategory) -> CategoryScan {
         return scan;
     }
 
-    let Some(dir) = folder(category) else { return scan };
-    scan.path = dir.display().to_string();
-    if !dir.is_dir() {
-        return scan;
+    let dirs: Vec<_> = folders(category).into_iter().filter(|d| d.is_dir()).collect();
+    scan.path = match dirs.as_slice() {
+        [] => return scan,
+        [one] => one.display().to_string(),
+        many => format!("{} pastas (ex.: {})", many.len(), many[0].display()),
+    };
+    for dir in &dirs {
+        let stats = scan_dir(dir);
+        scan.bytes += stats.bytes;
+        scan.files += stats.files;
+        scan.partial |= stats.unreadable > 0;
     }
-    let stats = scan_dir(&dir);
-    scan.bytes = stats.bytes;
-    scan.files = stats.files;
     scan.available = true;
-    scan.partial = stats.unreadable > 0;
     scan
 }
 
@@ -200,12 +219,17 @@ pub fn clean_one(category: CleanupCategory) -> CategoryResult {
         return result;
     }
 
-    let Some(dir) = folder(category).filter(|d| d.is_dir()) else { return result };
+    if let Some(app) = blocked_by(category) {
+        result.error = Some(format!("Feche o {app} antes: com ele aberto o cache está em uso."));
+        return result;
+    }
     let keep_newer_than = category.min_age().and_then(|age| SystemTime::now().checked_sub(age));
-    let stats = clean_dir(&dir, keep_newer_than);
-    result.freed_bytes = stats.freed_bytes;
-    result.deleted_files = stats.deleted_files;
-    result.skipped_files = stats.skipped_files;
+    for dir in folders(category).into_iter().filter(|d| d.is_dir()) {
+        let stats = clean_dir(&dir, keep_newer_than);
+        result.freed_bytes += stats.freed_bytes;
+        result.deleted_files += stats.deleted_files;
+        result.skipped_files += stats.skipped_files;
+    }
     result
 }
 

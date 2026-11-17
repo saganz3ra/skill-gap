@@ -25,7 +25,16 @@ export interface ActivePlan {
   name: string;
 }
 
-export type CleanupCategory = "userTemp" | "windowsTemp" | "windowsUpdateCache" | "shaderCache" | "recycleBin";
+export type CleanupCategory =
+  | "userTemp"
+  | "windowsTemp"
+  | "windowsUpdateCache"
+  | "shaderCache"
+  | "recycleBin"
+  | "browserCache"
+  | "crashDumps"
+  | "systemDumps"
+  | "thumbnailCache";
 
 export interface CategoryScan {
   category: CleanupCategory;
@@ -249,6 +258,7 @@ export interface SteamGame {
   exe: string | null;
   classicFullscreen: boolean;
   qos: boolean;
+  highPerfGpu: boolean;
 }
 
 export interface NicProperty {
@@ -532,6 +542,12 @@ export const api = {
   whatsNewSeen: () => invoke<void>("whats_new_seen"),
   bloatList: () => invoke<BloatApp[]>("bloat_list"),
   bloatRemove: (name: string) => invoke<void>("bloat_remove", { name }),
+  /** Reinstala da cópia do próprio PC (sem Store). */
+  bloatRestore: (name: string) => invoke<void>("bloat_restore", { name }),
+  guardianStatus: () => invoke<{ id: string; name: string }[]>("guardian_status"),
+  guardianReapply: () => invoke<BatchReport>("guardian_reapply"),
+  supportReport: () => invoke<string>("support_report"),
+  hwGpuSet: (exePath: string, enabled: boolean) => invoke<void>("hw_gpu_set", { exePath, enabled }),
   onCleanupProgress: (cb: (r: CategoryResult) => void): Promise<UnlistenFn> =>
     listen<CategoryResult>("cleanup-progress", (e) => cb(e.payload)),
 };
@@ -561,6 +577,26 @@ export const CLEANUP_INFO: Record<CleanupCategory, { name: string; desc: string;
     name: "Lixeira",
     desc: "Esvaziar é permanente.",
     defaultOn: true,
+  },
+  browserCache: {
+    name: "Cache dos navegadores",
+    desc: "Chrome, Edge, Brave e Firefox. Feche o navegador antes. Sites abrem um pouco mais devagar na primeira visita.",
+    defaultOn: false,
+  },
+  crashDumps: {
+    name: "Relatórios de travamento de apps",
+    desc: "Arquivos que apps e o Windows guardam quando um programa trava. Útil só pra quem for investigar o travamento.",
+    defaultOn: true,
+  },
+  systemDumps: {
+    name: "Minidumps de tela azul",
+    desc: "Registros de telas azuis antigas. Guarde se estiver investigando uma tela azul. Precisa de administrador.",
+    defaultOn: false,
+  },
+  thumbnailCache: {
+    name: "Cache de miniaturas e ícones",
+    desc: "O Explorador recria aos poucos; pastas com muitas fotos ficam lentas na primeira abertura. Arquivos em uso são pulados.",
+    defaultOn: false,
   },
 };
 

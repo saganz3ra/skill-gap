@@ -119,6 +119,53 @@ pub fn remove(name: &str) -> AppResult<()> {
     crate::system::powershell(&format!("Get-AppxPackage -Name '{}' | Remove-AppxPackage -ErrorAction Stop", app.name)).map(|_| ())
 }
 
+/// Manifesto da cópia provisionada (o "molde" que o Windows usa pra instalar o app em
+/// usuários novos). Fica em WindowsApps mesmo depois de remover o app do seu usuário.
+/// Caminho validado: dentro de `\WindowsApps\` e terminando no AppxManifest.xml.
+pub fn manifest_from_location(location: &str) -> Option<String> {
+    let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
+    let loc = location.trim().replace("%SYSTEMDRIVE%", &drive).replace("%SystemDrive%", &drive);
+    if loc.is_empty() || loc.contains("..") || !loc.to_ascii_lowercase().contains(r"\windowsapps\") {
+        return None;
+    }
+    let manifest = if loc.to_ascii_lowercase().ends_with("appxmanifest.xml") { loc } else { format!(r"{}\AppxManifest.xml", loc.trim_end_matches('\\')) };
+    Some(manifest)
+}
+
+/// Lê (no auxiliar elevado: a lista de provisionados exige admin) onde está a cópia
+/// provisionada do app. Só para apps da lista curada.
+#[cfg(windows)]
+pub fn provisioned_manifest(name: &str) -> AppResult<String> {
+    let app = find(name).ok_or_else(|| AppError::InvalidInput(format!("{name} não está na lista")))?;
+    let out = crate::system::powershell(&format!(
+        "(Get-AppxProvisionedPackage -Online | Where-Object DisplayName -eq '{}' | Select-Object -First 1).InstallLocation",
+        app.name
+    ))?;
+    let manifest = manifest_from_location(&out).ok_or_else(|| AppError::NotFound("não há cópia do app neste PC: reinstale pela Store".into()))?;
+    if !std::path::Path::new(&manifest).is_file() {
+        return Err(AppError::NotFound("não há cópia do app neste PC: reinstale pela Store".into()));
+    }
+    Ok(manifest)
+}
+
+/// Reinstala para o usuário atual a partir da cópia do próprio PC (sem Store, sem internet).
+#[cfg(windows)]
+pub fn register_manifest(manifest: &str) -> AppResult<()> {
+    if manifest_from_location(manifest).as_deref() != Some(manifest) || manifest.contains('\'') {
+        return Err(AppError::InvalidInput("caminho de manifesto inválido".into()));
+    }
+    crate::system::powershell(&format!("Add-AppxPackage -Register '{manifest}' -DisableDevelopmentMode -ErrorAction Stop")).map(|_| ())
+}
+
+#[cfg(not(windows))]
+pub fn provisioned_manifest(_name: &str) -> AppResult<String> {
+    Err(AppError::Unsupported)
+}
+#[cfg(not(windows))]
+pub fn register_manifest(_m: &str) -> AppResult<()> {
+    Err(AppError::Unsupported)
+}
+
 #[cfg(not(windows))]
 pub fn list() -> AppResult<Vec<BloatApp>> {
     Err(AppError::Unsupported)
@@ -132,6 +179,18 @@ pub fn remove(_name: &str) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manifesto_so_dentro_de_windowsapps() {
+        assert_eq!(
+            manifest_from_location(r"C:\Program Files\WindowsApps\Microsoft.BingNews_4.1_x64__8wekyb3d8bbwe").as_deref(),
+            Some(r"C:\Program Files\WindowsApps\Microsoft.BingNews_4.1_x64__8wekyb3d8bbwe\AppxManifest.xml")
+        );
+        assert!(manifest_from_location(r"%SYSTEMDRIVE%\Program Files\WindowsApps\X\AppxManifest.xml").is_some_and(|m| !m.contains('%')));
+        assert!(manifest_from_location(r"C:\Users\x\evil").is_none());
+        assert!(manifest_from_location(r"C:\Program Files\WindowsApps\..\..\evil").is_none());
+        assert!(manifest_from_location("").is_none());
+    }
 
     #[test]
     fn lista_nao_tem_apps_essenciais_nem_de_jogo() {

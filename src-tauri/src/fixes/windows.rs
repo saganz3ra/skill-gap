@@ -22,6 +22,19 @@ fn run_step(step: &Step) -> (bool, String) {
             }
             Err(e) => (false, e.to_string()),
         },
+        Step::OptimizeSystemDrive { .. } => {
+            // Tipo do disco lido do Windows na hora: TRIM em HD não faz nada e desfragmentar
+            // SSD só gasta escrita.
+            let mode = match crate::system::read_profile().system_disk {
+                crate::system::DiskKind::Hdd => "-Defrag",
+                _ => "-ReTrim",
+            };
+            let script = format!("Optimize-Volume -DriveLetter ($env:SystemDrive.Substring(0,1)) {mode} -Verbose 4>&1 | Out-String");
+            match crate::system::powershell(&script) {
+                Ok(out) => (true, clean_output(&out, MAX_LINES)),
+                Err(e) => (false, e.to_string()),
+            }
+        }
         Step::StopService { name, .. } => match WinSys.pause_service(name) {
             Ok(()) => (true, format!("{name} parado.")),
             // 1062 = ERROR_SERVICE_NOT_ACTIVE: já estava parado, que é o objetivo.

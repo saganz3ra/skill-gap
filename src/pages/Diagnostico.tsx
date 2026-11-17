@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { CircleCheck, CircleDashed, CircleX } from "lucide-react";
 
 import { api, type ComparisonRow } from "../lib/api";
@@ -21,6 +22,16 @@ function trend(row: ComparisonRow): "better" | "worse" | null {
 
 export function Diagnostico() {
   const res = useResource(api.diagnosisRun);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  async function copyReport() {
+    try {
+      await navigator.clipboard.writeText(await api.supportReport());
+      setCopied("Relatório copiado. Cole no chamado ou na conversa com o suporte.");
+    } catch (e) {
+      setCopied(friendlyError(e));
+    }
+  }
   const d = res.data?.diagnosis;
   const c = res.data?.comparison;
   const pending = d?.findings.filter((f) => f.optimized === false) ?? [];
@@ -33,6 +44,12 @@ export function Diagnostico() {
         subtitle="Lido do Windows agora: quanto do seu PC ainda está no padrão. Não é promessa de FPS."
       />
       {res.error ? <div className="error-box">{friendlyError(res.error)}</div> : null}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => void copyReport()}>
+          Copiar relatório para suporte
+        </button>
+        <span className="muted small">{copied ?? "Máquina e o que o app mudou, sem nome de usuário nem e-mail."}</span>
+      </div>
 
       <section className="card" aria-labelledby="pot">
         <div className="card-head">

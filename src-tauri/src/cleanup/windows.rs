@@ -19,16 +19,52 @@ fn system_root() -> PathBuf {
     env_dir("SystemRoot").unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
 }
 
+/// Pastas de cache de cada perfil dos navegadores (Chromium: um por perfil).
+fn browser_caches() -> Vec<PathBuf> {
+    let Some(local) = env_dir("LOCALAPPDATA") else { return Vec::new() };
+    let mut out = Vec::new();
+    for base in [r"Google\Chrome\User Data", r"Microsoft\Edge\User Data", r"BraveSoftware\Brave-Browser\User Data"] {
+        let Ok(profiles) = std::fs::read_dir(local.join(base)) else { continue };
+        for p in profiles.flatten().map(|e| e.path()) {
+            out.push(p.join(r"Cache\Cache_Data"));
+            out.push(p.join("Code Cache"));
+        }
+    }
+    if let Ok(profiles) = std::fs::read_dir(local.join(r"Mozilla\Firefox\Profiles")) {
+        out.extend(profiles.flatten().map(|e| e.path().join("cache2")));
+    }
+    out
+}
+
 /// Onde fica cada categoria neste PC (variáveis de ambiente, não caminhos fixos:
 /// o Windows pode estar em outra unidade ou com o perfil redirecionado).
-pub fn folder(category: CleanupCategory) -> Option<PathBuf> {
+pub fn folders(category: CleanupCategory) -> Vec<PathBuf> {
+    let local = env_dir("LOCALAPPDATA");
     match category {
-        CleanupCategory::UserTemp => Some(std::env::temp_dir()),
-        CleanupCategory::WindowsTemp => Some(system_root().join("Temp")),
-        CleanupCategory::WindowsUpdateCache => Some(system_root().join(r"SoftwareDistribution\Download")),
-        CleanupCategory::ShaderCache => env_dir("LOCALAPPDATA").map(|d| d.join("D3DSCache")),
-        CleanupCategory::RecycleBin => None,
+        CleanupCategory::UserTemp => vec![std::env::temp_dir()],
+        CleanupCategory::WindowsTemp => vec![system_root().join("Temp")],
+        CleanupCategory::WindowsUpdateCache => vec![system_root().join(r"SoftwareDistribution\Download")],
+        CleanupCategory::ShaderCache => local.map(|d| d.join("D3DSCache")).into_iter().collect(),
+        CleanupCategory::RecycleBin => Vec::new(),
+        CleanupCategory::BrowserCache => browser_caches(),
+        CleanupCategory::CrashDumps => local
+            .map(|d| vec![d.join("CrashDumps"), d.join(r"Microsoft\Windows\WER\ReportArchive"), d.join(r"Microsoft\Windows\WER\ReportQueue")])
+            .unwrap_or_default(),
+        CleanupCategory::SystemDumps => vec![system_root().join("Minidump")],
+        CleanupCategory::ThumbnailCache => local.map(|d| d.join(r"Microsoft\Windows\Explorer")).into_iter().collect(),
     }
+}
+
+/// Programa que precisa estar fechado pra limpar a categoria.
+pub fn blocked_by(category: CleanupCategory) -> Option<&'static str> {
+    if category != CleanupCategory::BrowserCache {
+        return None;
+    }
+    let running = crate::gaming::process_list();
+    [("chrome.exe", "Chrome"), ("msedge.exe", "Edge"), ("brave.exe", "Brave"), ("firefox.exe", "Firefox")]
+        .into_iter()
+        .find(|(exe, _)| running.iter().any(|(_, n)| n.eq_ignore_ascii_case(exe)))
+        .map(|(_, name)| name)
 }
 
 /// String Rust → UTF-16 terminada em zero, que é o que a API Win32 espera.

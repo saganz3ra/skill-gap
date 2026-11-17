@@ -1352,6 +1352,59 @@ pub static TWEAKS: &[Tweak] = &[
         &[Op::Dword { hive: Hkcu, path: r"Software\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy", name: "01", value: 0 }],
     ),
 
+    // ---------------- Serviços em grupo (Fase 7) ----------------
+    // Fora de qualquer lista, sempre: Defender, firewall, Windows Update, Store,
+    // impressão, áudio, DHCP/DNS e temas. Serviço que não existe no PC é pulado.
+    tw(
+        "services_basic",
+        "Serviços: perfil Básico",
+        "Desativa serviços que quase ninguém usa: Fax, modo demonstração de loja, mapas offline, Registro Remoto e compartilhamento do Windows Media Player.",
+        "Ganho pequeno de RAM e boot. Seguro pra uso doméstico; o desfazer volta cada serviço exatamente como estava (inclusive início atrasado).",
+        Category::Desempenho,
+        Impact::Small,
+        Restart::Reboot,
+        &[
+            Op::Service { name: "Fax", start: 4 },
+            Op::Service { name: "RetailDemo", start: 4 },
+            Op::Service { name: "MapsBroker", start: 4 },
+            Op::Service { name: "RemoteRegistry", start: 4 },
+            Op::Service { name: "WMPNetworkSvc", start: 4 },
+        ],
+    ),
+    tw(
+        "services_advanced",
+        "Serviços: perfil Avançado",
+        "Desativa serviços com uso específico: roteamento de push WAP, relatório de erros, telefonia, pagamentos/NFC, geolocalização, rastreamento de links, Insider e hotspot móvel.",
+        "Ganho pequeno. Cada item tem um uso real para alguém: leia o que pode afetar antes.",
+        Category::Desempenho,
+        Impact::Small,
+        Restart::Reboot,
+        &[
+            Op::Service { name: "dmwappushservice", start: 4 },
+            Op::Service { name: "WerSvc", start: 4 },
+            Op::Service { name: "PhoneSvc", start: 4 },
+            Op::Service { name: "SEMgrSvc", start: 4 },
+            Op::Service { name: "lfsvc", start: 4 },
+            Op::Service { name: "TrkWks", start: 4 },
+            Op::Service { name: "wisvc", start: 4 },
+            Op::Service { name: "icssvc", start: 4 },
+        ],
+    )
+    .risk(
+        Risk::Medium,
+        "Sem hotspot móvel, sem pagamentos por NFC, sem localização, sem Windows Insider, sem relatórios de erro e atalhos de rede podem não se achar.",
+    ),
+    tw(
+        "chrome_background_off",
+        "Chrome sem rodar em segundo plano",
+        "Política: o Chrome fecha de verdade ao fechar a última janela.",
+        "Economiza RAM pra quem não usa apps do Chrome em segundo plano. Não impede o Chrome de se atualizar.",
+        Category::Geral,
+        Impact::Medium,
+        Restart::None,
+        &[Op::Dword { hive: Hklm, path: r"SOFTWARE\Policies\Google\Chrome", name: "BackgroundModeEnabled", value: 0 }],
+    ),
+
     // ---------------- Apps de terceiros ----------------
     tw(
         "discord_no_autostart",

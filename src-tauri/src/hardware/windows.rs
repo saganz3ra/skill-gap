@@ -124,7 +124,16 @@ pub fn steam_games() -> Vec<SteamGame> {
             let exe = pick_main_exe(&exes).map(|rel| install.join(rel).to_string_lossy().into_owned());
             let classic = exe.as_deref().is_some_and(|p| has_flag(fse_read(p).as_deref()));
             let qos = exe.as_deref().and_then(|p| Path::new(p).file_name()).is_some_and(|f| qos_exists(&f.to_string_lossy()));
-            games.push(SteamGame { app_id: app_id.into(), name: title.into(), install_dir: install.to_string_lossy().into_owned(), exe, classic_fullscreen: classic, qos });
+            let high_perf_gpu = exe.as_deref().is_some_and(|p| gpu_read(p).is_some_and(|v| v.contains("GpuPreference=2")));
+            games.push(SteamGame {
+                app_id: app_id.into(),
+                name: title.into(),
+                install_dir: install.to_string_lossy().into_owned(),
+                exe,
+                classic_fullscreen: classic,
+                qos,
+                high_perf_gpu,
+            });
         }
     }
     games.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
@@ -146,6 +155,24 @@ pub fn fse_write(exe_path: &str, value: Option<&str>) -> AppResult<()> {
         return Err(invalid("executável inválido"));
     }
     let (key, _) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(LAYERS).map_err(AppError::from_io)?;
+    match value {
+        Some(v) => key.set_value(exe_path, &v.to_string()).map_err(AppError::from_io),
+        None => match key.delete_value(exe_path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(AppError::from_io(e)),
+            _ => Ok(()),
+        },
+    }
+}
+
+pub fn gpu_read(exe_path: &str) -> Option<String> {
+    RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(GPU_PREFS, KEY_READ).ok()?.get_value::<String, _>(exe_path).ok()
+}
+
+pub fn gpu_write(exe_path: &str, value: Option<&str>) -> AppResult<()> {
+    if !valid_exe_path(exe_path) {
+        return Err(invalid("executável inválido"));
+    }
+    let (key, _) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(GPU_PREFS).map_err(AppError::from_io)?;
     match value {
         Some(v) => key.set_value(exe_path, &v.to_string()).map_err(AppError::from_io),
         None => match key.delete_value(exe_path) {

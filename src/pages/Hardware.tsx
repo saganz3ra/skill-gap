@@ -85,7 +85,8 @@ export function Hardware() {
         </h2>
         <p className="muted small" style={{ margin: 0 }}>
           <strong>Tela cheia clássica</strong>: desliga as "otimizações de tela cheia" só neste jogo. <strong>Prioridade de rede</strong>: marca os pacotes do
-          jogo com DSCP 46 (QoS). Muitos roteadores domésticos ignoram essa marcação; só ajuda se o seu respeitar.
+          jogo com DSCP 46 (QoS). Muitos roteadores domésticos ignoram essa marcação; só ajuda se o seu respeitar. <strong>GPU</strong>: força a placa
+          de vídeo de alto desempenho (útil em notebook com duas GPUs).
         </p>
         {games.loading && <p className="muted small">Procurando jogos…</p>}
         {games.data?.length === 0 && <p className="small">Nenhum jogo da Steam encontrado.</p>}
@@ -103,6 +104,13 @@ export function Hardware() {
                   disabled={busy !== null}
                   label={`Tela cheia clássica em ${g.name}`}
                   onChange={(on) => void run(`fse${g.appId}`, () => api.hwFseSet(g.exe!, on), games.reload)}
+                />
+                <span className="small muted">GPU</span>
+                <Switch
+                  checked={g.highPerfGpu}
+                  disabled={busy !== null}
+                  label={`GPU de alto desempenho em ${g.name}`}
+                  onChange={(on) => void run(`gpu${g.appId}`, () => api.hwGpuSet(g.exe!, on), games.reload)}
                 />
                 <span className="small muted">Rede</span>
                 <Switch
