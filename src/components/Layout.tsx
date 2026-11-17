@@ -17,6 +17,7 @@ import {
   Zap,
   type LucideIcon,
   Gauge,
+  CircuitBoard,
 } from "lucide-react";
 
 const NAV: { group: string; items: { to: string; label: string; icon: LucideIcon; end?: boolean }[] }[] = [
@@ -42,6 +43,7 @@ const NAV: { group: string; items: { to: string; label: string; icon: LucideIcon
     items: [
       { to: "/modo-jogo", label: "Modo Jogo", icon: Gamepad2 },
       { to: "/mouse", label: "Mouse", icon: MousePointer2 },
+      { to: "/hardware", label: "Hardware e jogos", icon: CircuitBoard },
     ],
   },
   {

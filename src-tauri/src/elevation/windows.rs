@@ -224,6 +224,10 @@ fn execute(req: Request, mut progress: impl FnMut(serde_json::Value)) -> AppResu
         Request::PowerSetting { plan, sub, setting, value } => unit(WinSys.set_power_value(&plan, &sub, &setting, value)),
         Request::TaskEnabled { path, enabled } => unit(WinSys.set_task_enabled(&path, enabled)),
         Request::PageCombining { enabled } => unit(WinSys.set_page_combining(enabled)),
+        Request::MsiWrite { instance_id, value } => unit(crate::hardware::msi_write(&instance_id, value)),
+        Request::QosSet { exe, enabled } => unit(crate::hardware::qos_set(&exe, enabled)),
+        Request::QosNla { value } => unit(crate::hardware::nla_write(value.as_deref())),
+        Request::NicWrite { adapter, keyword, value } => unit(crate::hardware::nic_write(&adapter, &keyword, &value)),
         Request::NetSetting { key, value } => unit(WinSys.set_net_setting(key, &value)),
         Request::CleanCategory { category } => Ok(serde_json::to_value(crate::cleanup::clean_one(category)).unwrap_or_default()),
     }

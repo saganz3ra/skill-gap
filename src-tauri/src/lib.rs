@@ -7,6 +7,7 @@ mod elevation;
 mod error;
 mod fixes;
 mod gaming;
+mod hardware;
 mod monitor;
 mod netcfg;
 mod news;
@@ -381,6 +382,153 @@ async fn net_discard(app: tauri::AppHandle) -> AppResult<()> {
     blocking(move || app.state::<netcfg::NetState>().discard()).await
 }
 
+// ---------------- Hardware e por jogo ----------------
+
+fn hw(app: &tauri::AppHandle) -> tauri::State<'_, hardware::HardwareState> {
+    app.state::<hardware::HardwareState>()
+}
+
+/// Executa local se admin, senão no auxiliar (UAC na hora).
+fn elevated(local: impl FnOnce() -> AppResult<()>, req: elevation::Request) -> AppResult<()> {
+    elevation::admin_or_elevated(local, req, |_| {}, elevation::unit)
+}
+
+#[tauri::command]
+async fn hw_msi_list(app: tauri::AppHandle) -> AppResult<(Vec<hardware::MsiDevice>, Vec<String>)> {
+    blocking(move || Ok((hardware::msi_devices()?, hw(&app).snapshot().msi.into_keys().collect()))).await
+}
+
+/// `enabled`: liga o MSI (anota o valor anterior); `false`: volta ao valor anotado.
+#[tauri::command]
+async fn hw_msi_set(app: tauri::AppHandle, instance_id: String, enabled: bool) -> AppResult<()> {
+    blocking(move || {
+        let device = hardware::msi_devices()?
+            .into_iter()
+            .find(|d| d.instance_id.eq_ignore_ascii_case(&instance_id))
+            .ok_or_else(|| hardware::invalid("dispositivo fora da lista atual do Windows"))?;
+        let id = device.instance_id.clone();
+        let value = if enabled {
+            hw(&app).record(|j| {
+                j.msi.entry(id.clone()).or_insert(device.msi);
+            })?;
+            Some(1)
+        } else {
+            hw(&app).snapshot().msi.get(&id).copied().ok_or_else(|| hardware::invalid("nada a desfazer neste dispositivo"))?
+        };
+        let req = elevation::Request::MsiWrite { instance_id: id.clone(), value };
+        elevated(|| hardware::msi_write(&id, value), req)?;
+        if !enabled {
+            hw(&app).record(|j| {
+                j.msi.remove(&id);
+            })?;
+        }
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn hw_steam_games() -> AppResult<Vec<hardware::SteamGame>> {
+    blocking(|| Ok(hardware::steam_games())).await
+}
+
+fn steam_exe(path: &str) -> AppResult<String> {
+    hardware::steam_games()
+        .into_iter()
+        .filter_map(|g| g.exe)
+        .find(|e| e.eq_ignore_ascii_case(path))
+        .ok_or_else(|| hardware::invalid("jogo fora da lista da Steam"))
+}
+
+#[tauri::command]
+async fn hw_fse_set(app: tauri::AppHandle, exe_path: String, enabled: bool) -> AppResult<()> {
+    blocking(move || {
+        let exe = steam_exe(&exe_path)?;
+        if enabled {
+            let prev = hardware::fse_read(&exe);
+            hw(&app).record(|j| {
+                j.fse.entry(exe.clone()).or_insert(prev.clone());
+            })?;
+            hardware::fse_write(&exe, Some(&hardware::add_flag(prev.as_deref())))
+        } else {
+            let prev = hw(&app).snapshot().fse.get(&exe).cloned().ok_or_else(|| hardware::invalid("nada a desfazer neste jogo"))?;
+            hardware::fse_write(&exe, prev.as_deref())?;
+            hw(&app).record(|j| {
+                j.fse.remove(&exe);
+            })
+        }
+    })
+    .await
+}
+
+#[tauri::command]
+async fn hw_qos_set(app: tauri::AppHandle, exe_path: String, enabled: bool) -> AppResult<()> {
+    blocking(move || {
+        let full = steam_exe(&exe_path)?;
+        let exe = std::path::Path::new(&full).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+        hardware::qos_name(&exe).ok_or_else(|| hardware::invalid("nome de executável não suportado"))?;
+        if enabled {
+            if hw(&app).snapshot().nla.is_none() {
+                let prev = hardware::nla_read();
+                hw(&app).record(|j| j.nla = Some(prev))?;
+                elevated(|| hardware::nla_write(Some("1")), elevation::Request::QosNla { value: Some("1".into()) })?;
+            }
+            hw(&app).record(|j| {
+                j.qos.insert(exe.clone(), true);
+            })?;
+            elevated(|| hardware::qos_set(&exe, true), elevation::Request::QosSet { exe: exe.clone(), enabled: true })
+        } else {
+            elevated(|| hardware::qos_set(&exe, false), elevation::Request::QosSet { exe: exe.clone(), enabled: false })?;
+            hw(&app).record(|j| {
+                j.qos.remove(&exe);
+            })?;
+            // Última política removida: devolve o "Do not use NLA" como era.
+            let j = hw(&app).snapshot();
+            if let (true, Some(prev)) = (j.qos.is_empty(), j.nla.clone()) {
+                elevated(|| hardware::nla_write(prev.as_deref()), elevation::Request::QosNla { value: prev.clone() })?;
+                hw(&app).record(|j| j.nla = None)?;
+            }
+            Ok(())
+        }
+    })
+    .await
+}
+
+#[tauri::command]
+async fn hw_nic_list(app: tauri::AppHandle) -> AppResult<(Vec<hardware::NicProperty>, Vec<String>)> {
+    blocking(move || Ok((hardware::nic_properties()?, hw(&app).snapshot().nic.into_keys().collect()))).await
+}
+
+/// `value: None` volta ao valor anotado antes da primeira mudança.
+#[tauri::command]
+async fn hw_nic_set(app: tauri::AppHandle, adapter: String, keyword: String, value: Option<String>) -> AppResult<()> {
+    blocking(move || {
+        let key = format!("{adapter}|{keyword}");
+        let current = hardware::nic_properties()?
+            .into_iter()
+            .find(|p| p.adapter == adapter && p.keyword == keyword)
+            .ok_or_else(|| hardware::invalid("propriedade não encontrada"))?;
+        let target = match &value {
+            Some(v) => {
+                hw(&app).record(|j| {
+                    j.nic.entry(key.clone()).or_insert(current.value.clone());
+                })?;
+                v.clone()
+            }
+            None => hw(&app).snapshot().nic.get(&key).cloned().ok_or_else(|| hardware::invalid("nada a desfazer"))?,
+        };
+        let req = elevation::Request::NicWrite { adapter: adapter.clone(), keyword: keyword.clone(), value: target.clone() };
+        elevated(|| hardware::nic_write(&adapter, &keyword, &target), req)?;
+        if value.is_none() {
+            hw(&app).record(|j| {
+                j.nic.remove(&key);
+            })?;
+        }
+        Ok(())
+    })
+    .await
+}
+
 // ---------------- Timer ----------------
 
 /// Mede o timer agora (sem alterar nada). Leva até ~2 s.
@@ -532,6 +680,7 @@ pub fn run() {
             app.manage(news::NewsState::load(dir.join("novidades.json")));
             app.manage(netcfg::NetState::load(dir.join("rede-antes-do-reset.json")));
             app.manage(diagnosis::BaselineState::load(dir.join("linha-de-base.json")));
+            app.manage(hardware::HardwareState::load(dir.join("hardware.json")));
             // Primeira leitura logo ao abrir (antes de o usuário mexer em algo), em segundo plano.
             let handle = app.handle().clone();
             std::thread::spawn(move || {
@@ -589,7 +738,14 @@ pub fn run() {
             net_discard,
             diagnosis_run,
             timer_measure,
-            game_suggestions
+            game_suggestions,
+            hw_msi_list,
+            hw_msi_set,
+            hw_steam_games,
+            hw_fse_set,
+            hw_qos_set,
+            hw_nic_list,
+            hw_nic_set
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Skill Gap");
