@@ -192,6 +192,28 @@ export function describeAdapter(a: AdapterConfig): string {
   return `${a.name}: ${parts.join(" · ")}`;
 }
 
+export interface Finding {
+  id: string;
+  label: string;
+  weight: number;
+  optimized: boolean | null;
+  hint: string;
+}
+
+export interface ComparisonRow {
+  label: string;
+  kind: "count" | "bytes" | "score" | "text";
+  before: number | string | null;
+  now: number | string | null;
+  firm: boolean;
+  lowerIsBetter: boolean | null;
+}
+
+export interface DiagnosisReport {
+  diagnosis: { potential: number; findings: Finding[] };
+  comparison: { baselineAt: number | null; afterChanges: boolean; rows: ComparisonRow[] };
+}
+
 export type Gate = { status: "ok" } | { status: "warn"; reason: string } | { status: "unavailable"; reason: string };
 
 /** Mesma regra do backend (`profile_skip_reason`): o que um perfil pula. */
@@ -449,6 +471,7 @@ export const api = {
   bootReport: (ask = false) => invoke<BootReport>("boot_report", { ask }),
   elevationStatus: () => invoke<ElevationStatus>("elevation_status"),
   whatsNew: () => invoke<WhatsNew>("whats_new"),
+  diagnosisRun: () => invoke<DiagnosisReport>("diagnosis_run"),
   whatsNewSeen: () => invoke<void>("whats_new_seen"),
   bloatList: () => invoke<BloatApp[]>("bloat_list"),
   bloatRemove: (name: string) => invoke<void>("bloat_remove", { name }),
