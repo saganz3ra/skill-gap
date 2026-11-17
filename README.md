@@ -125,6 +125,18 @@ cd src-tauri
 cargo test      # 74 testes (inclui a política do auxiliar elevado): motor de ajustes, perfis, limpeza, Modo Jogo, monitor, drivers, correções, planos de energia, log de boot, apps de fábrica
 ```
 
+## Versões e instalador
+
+O GitHub gera o instalador sozinho (`.github/workflows/release.yml`):
+
+1. Suba a versão em `src-tauri/tauri.conf.json` e `package.json` (ex.: `0.2.0`) e faça commit.
+2. `git tag v0.2.0 && git push origin v0.2.0`
+3. Em ~10 min aparece uma **Release em rascunho** com o `Skill Gap_0.2.0_x64-setup.exe`. Revise e clique em *Publish*.
+
+O workflow confere se a tag bate com a versão e roda os testes antes de compilar. Todo PR e push na `main` também rodam os testes num runner Windows (`ci.yml`).
+
+Para gerar localmente: `npm run tauri build` → `src-tauri/target/release/bundle/nsis/`.
+
 ## Próximos passos
 
 As quatro fases planejadas estão prontas. Ideias pra depois:
