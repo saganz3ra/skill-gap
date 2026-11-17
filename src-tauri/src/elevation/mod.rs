@@ -42,6 +42,13 @@ pub enum Request {
     DriversBackup,
     BootReport,
     RunFix { id: String },
+    /// Valor de energia dentro de um plano (só pares sub/config do catálogo).
+    PowerSetting { plan: String, sub: String, setting: String, value: u32 },
+    /// Liga/desliga tarefa agendada (só as do catálogo).
+    TaskEnabled { path: String, enabled: bool },
+    PageCombining { enabled: bool },
+    /// Configuração de rede (só valores da lista fechada).
+    NetSetting { key: crate::tweaks::ops::NetKey, value: String },
     /// Recoloca IP/DNS fixos de um adaptador depois do "Resetar a rede".
     RestoreNetwork { adapter: crate::netcfg::AdapterConfig },
     CleanCategory { category: CleanupCategory },
@@ -107,6 +114,20 @@ fn catalog_allows(path: &str, name: &str, string: bool) -> bool {
     })
 }
 
+fn all_ops() -> impl Iterator<Item = &'static Op> {
+    TWEAKS.iter().flat_map(|t| t.ops.iter())
+}
+
+/// O par (sub, config) aparece em algum `Op::PowerSetting` do catálogo.
+fn power_setting_allowed<'a>(mut ops: impl Iterator<Item = &'a Op>, sub: &str, setting: &str) -> bool {
+    ops.any(|op| matches!(*op, Op::PowerSetting { sub: s, setting: c, .. } if s.eq_ignore_ascii_case(sub) && c.eq_ignore_ascii_case(setting)))
+}
+
+/// A tarefa aparece em algum `Op::ScheduledTaskOff` do catálogo.
+fn task_allowed<'a>(mut ops: impl Iterator<Item = &'a Op>, path: &str) -> bool {
+    ops.any(|op| matches!(*op, Op::ScheduledTaskOff { path: p } if p.eq_ignore_ascii_case(path)))
+}
+
 fn service_allowed(name: &str) -> bool {
     ALLOWED_SERVICES.iter().any(|s| s.eq_ignore_ascii_case(name))
 }
@@ -126,6 +147,12 @@ pub fn check(req: &Request) -> Result<(), String> {
             matches!(s, StartupSource::MachineRun | StartupSource::MachineRun32 | StartupSource::CommonFolder)
         }),
         Request::RunFix { id } => crate::fixes::find(id).is_some(),
+        Request::PowerSetting { plan, sub, setting, .. } => {
+            crate::tweaks::ops::is_guid_plain(plan) && power_setting_allowed(all_ops(), sub, setting)
+        }
+        Request::TaskEnabled { path, .. } => task_allowed(all_ops(), path),
+        Request::PageCombining { .. } => true,
+        Request::NetSetting { key, value } => key.canonical(value).is_some(),
         Request::RestoreNetwork { adapter } => crate::netcfg::validate(adapter).is_ok(),
         Request::CleanCategory { category } => category.requires_admin(),
         Request::MemoryCompression { .. } | Request::RestorePoint | Request::DriversBackup | Request::BootReport => true,
@@ -267,6 +294,22 @@ mod tests {
         assert!(check(&Request::RestoreNetwork { adapter: ok.clone() }).is_ok());
         let bad = crate::netcfg::AdapterConfig { dns4: vec!["1.1.1.1\" & calc".into()], ..ok };
         assert!(check(&Request::RestoreNetwork { adapter: bad }).is_err());
+    }
+
+    #[test]
+    fn energia_e_tarefas_so_do_catalogo() {
+        const SUB: &str = "54533251-82be-4824-96c1-47b60b740d00";
+        const SET: &str = "893dee8e-2bef-41e0-89c6-b55d0929964c";
+        let ops = [Op::PowerSetting { sub: SUB, setting: SET, ac: 100 }, Op::ScheduledTaskOff { path: r"\Microsoft\Windows\X\Y" }];
+        assert!(power_setting_allowed(ops.iter(), SUB, &SET.to_uppercase()));
+        assert!(!power_setting_allowed(ops.iter(), SUB, "00000000-0000-0000-0000-000000000000"));
+        assert!(task_allowed(ops.iter(), r"\microsoft\windows\x\y"));
+        assert!(!task_allowed(ops.iter(), r"\Microsoft\Windows\Defender\Scan"));
+        let net = |v: &str| Request::NetSetting { key: crate::tweaks::ops::NetKey::Teredo, value: v.into() };
+        assert!(check(&net("Disabled")).is_ok());
+        assert!(check(&net("Disabled; calc")).is_err());
+        let plan = |p: &str| Request::PowerSetting { plan: p.into(), sub: SUB.into(), setting: SET.into(), value: 1 };
+        assert!(check(&plan("not-a-guid")).is_err());
     }
 
     #[test]

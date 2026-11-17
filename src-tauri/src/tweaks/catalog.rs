@@ -185,8 +185,13 @@ impl Tweak {
     pub fn requires_admin(&self) -> bool {
         self.ops.iter().any(|op| match op {
             Op::Dword { hive, .. } | Op::Str { hive, .. } | Op::KeyWithEmptyDefault { hive, .. } => *hive == Hklm,
-            Op::Service { .. } | Op::MemoryCompressionOff => true,
-            Op::PowerPlan(_) | Op::MouseAccelerationOff | Op::MouseSpeed(_) => false,
+            Op::Service { .. }
+            | Op::MemoryCompressionOff
+            | Op::PageCombiningOff
+            | Op::ScheduledTaskOff { .. }
+            | Op::Net { .. }
+            | Op::PowerSetting { .. } => true,
+            Op::PowerPlan(_) | Op::MouseAccelerationOff | Op::MouseSpeed(_) | Op::JsonFileKey { .. } => false,
         })
     }
 }
@@ -657,6 +662,11 @@ mod tests {
             Op::MouseAccelerationOff => "spi:mouse_accel".into(),
             Op::MouseSpeed(_) => "spi:mouse_speed".into(),
             Op::MemoryCompressionOff => "mmagent:compression".into(),
+            Op::PageCombiningOff => "mmagent:pagecombining".into(),
+            Op::PowerSetting { sub, setting, .. } => format!("power:{}:{}", sub.to_ascii_lowercase(), setting.to_ascii_lowercase()),
+            Op::ScheduledTaskOff { path } => format!("task:{}", path.to_ascii_lowercase()),
+            Op::Net { key, .. } => format!("net:{key:?}"),
+            Op::JsonFileKey { env, file, key, .. } => format!("json:{env}:{}:{key}", file.to_ascii_lowercase()),
         }
     }
 

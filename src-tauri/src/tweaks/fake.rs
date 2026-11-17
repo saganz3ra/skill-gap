@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-use super::ops::{GameSys, Hive, Sys, NORMAL_PRIORITY};
+use super::ops::{GameSys, Hive, NetKey, Sys, NORMAL_PRIORITY};
 use crate::error::{AppError, AppResult};
 use crate::power::PowerPlan;
 
@@ -20,6 +20,14 @@ struct State {
     /// pid -> (exe, prioridade)
     procs: Vec<(u32, String, u32)>,
     services: HashMap<String, bool>,
+    /// (sub, config) -> valor no plano; chave ausente = PC não tem a configuração.
+    /// O valor é guardado por (plano, sub, config) pra testar o "desfazer no mesmo plano".
+    power: HashMap<(String, String, String), u32>,
+    tasks: HashMap<String, bool>,
+    page_combining: bool,
+    net: HashMap<NetKey, String>,
+    /// (env, arquivo) -> objeto JSON.
+    json: HashMap<(String, String), serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,6 +49,11 @@ impl Default for State {
             deny_hklm: false,
             procs: Vec::new(),
             services: HashMap::new(),
+            power: HashMap::new(),
+            tasks: HashMap::new(),
+            page_combining: true,
+            net: HashMap::new(),
+            json: HashMap::new(),
         }
     }
 }
@@ -72,6 +85,30 @@ impl FakeSys {
     }
     pub fn service(&self, name: &str) -> Option<bool> {
         self.0.lock().unwrap().services.get(name).copied()
+    }
+    /// Faz o PC "ter" uma configuração de energia, com o valor no plano ativo.
+    pub fn add_power_setting(&self, sub: &str, setting: &str, value: u32) {
+        let plan = self.active_plan().unwrap().0;
+        self.0.lock().unwrap().power.insert((plan, sub.into(), setting.into()), value);
+    }
+    pub fn power_in(&self, plan: &str, sub: &str, setting: &str) -> Option<u32> {
+        self.0.lock().unwrap().power.get(&(plan.to_string(), sub.to_string(), setting.to_string())).copied()
+    }
+    pub fn add_task(&self, path: &str, enabled: bool) {
+        self.0.lock().unwrap().tasks.insert(path.into(), enabled);
+    }
+    pub fn task(&self, path: &str) -> Option<bool> {
+        self.0.lock().unwrap().tasks.get(path).copied()
+    }
+    pub fn set_net(&self, key: NetKey, value: &str) {
+        self.0.lock().unwrap().net.insert(key, value.into());
+    }
+    pub fn add_json(&self, env: &str, file: &str, content: serde_json::Value) {
+        let map = content.as_object().cloned().unwrap_or_default();
+        self.0.lock().unwrap().json.insert((env.into(), file.into()), map);
+    }
+    pub fn json(&self, env: &str, file: &str) -> Option<serde_json::Value> {
+        self.0.lock().unwrap().json.get(&(env.to_string(), file.to_string())).map(|m| serde_json::Value::Object(m.clone()))
     }
     pub fn deny_hklm(&self) {
         self.0.lock().unwrap().deny_hklm = true;
@@ -208,6 +245,78 @@ impl Sys for FakeSys {
 
     fn set_memory_compression(&self, enabled: bool) -> AppResult<()> {
         self.0.lock().unwrap().memory_compression = enabled;
+        Ok(())
+    }
+
+    fn power_value(&self, sub: &str, setting: &str) -> AppResult<Option<(String, u32)>> {
+        let plan = self.active_plan()?.0;
+        let s = self.0.lock().unwrap();
+        // "Existe no PC" = existe em algum plano; o valor é o do plano ativo (0 se nunca mudou).
+        let exists = s.power.keys().any(|(_, a, b)| a == sub && b == setting);
+        Ok(exists.then(|| {
+            let v = s.power.get(&(plan.clone(), sub.to_string(), setting.to_string())).copied().unwrap_or(0);
+            (plan, v)
+        }))
+    }
+
+    fn set_power_value(&self, plan: &str, sub: &str, setting: &str, ac: u32) -> AppResult<()> {
+        self.check_write(Hive::Hklm, setting)?;
+        self.0.lock().unwrap().power.insert((plan.into(), sub.into(), setting.into()), ac);
+        Ok(())
+    }
+
+    fn task_enabled(&self, path: &str) -> Option<bool> {
+        self.task(path)
+    }
+
+    fn set_task_enabled(&self, path: &str, enabled: bool) -> AppResult<()> {
+        self.check_write(Hive::Hklm, path)?;
+        let mut s = self.0.lock().unwrap();
+        let t = s.tasks.get_mut(path).ok_or(AppError::NotFound(path.into()))?;
+        *t = enabled;
+        Ok(())
+    }
+
+    fn page_combining(&self) -> AppResult<bool> {
+        Ok(self.0.lock().unwrap().page_combining)
+    }
+
+    fn set_page_combining(&self, enabled: bool) -> AppResult<()> {
+        self.0.lock().unwrap().page_combining = enabled;
+        Ok(())
+    }
+
+    fn net_setting(&self, key: NetKey) -> AppResult<String> {
+        self.0.lock().unwrap().net.get(&key).cloned().ok_or(AppError::Unsupported)
+    }
+
+    fn set_net_setting(&self, key: NetKey, value: &str) -> AppResult<()> {
+        let v = key.canonical(value).ok_or_else(|| AppError::InvalidInput(value.into()))?;
+        self.0.lock().unwrap().net.insert(key, v.into());
+        Ok(())
+    }
+
+    fn json_file_exists(&self, env: &str, file: &str) -> bool {
+        self.0.lock().unwrap().json.contains_key(&(env.to_string(), file.to_string()))
+    }
+
+    fn json_key(&self, env: &str, file: &str, key: &str) -> AppResult<Option<String>> {
+        let s = self.0.lock().unwrap();
+        let map = s.json.get(&(env.to_string(), file.to_string())).ok_or(AppError::NotFound(file.into()))?;
+        Ok(map.get(key).map(|v| v.to_string()))
+    }
+
+    fn set_json_key(&self, env: &str, file: &str, key: &str, value: Option<&str>) -> AppResult<()> {
+        let mut s = self.0.lock().unwrap();
+        let map = s.json.get_mut(&(env.to_string(), file.to_string())).ok_or(AppError::NotFound(file.into()))?;
+        match value {
+            Some(v) => {
+                map.insert(key.into(), serde_json::from_str(v).map_err(|e| AppError::InvalidInput(e.to_string()))?);
+            }
+            None => {
+                map.remove(key);
+            }
+        }
         Ok(())
     }
 }

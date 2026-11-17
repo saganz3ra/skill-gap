@@ -221,6 +221,10 @@ fn execute(req: Request, mut progress: impl FnMut(serde_json::Value)) -> AppResu
             Ok(serde_json::to_value(report).unwrap_or_default())
         }
         Request::RestoreNetwork { adapter } => unit(crate::netcfg::apply(&adapter)),
+        Request::PowerSetting { plan, sub, setting, value } => unit(WinSys.set_power_value(&plan, &sub, &setting, value)),
+        Request::TaskEnabled { path, enabled } => unit(WinSys.set_task_enabled(&path, enabled)),
+        Request::PageCombining { enabled } => unit(WinSys.set_page_combining(enabled)),
+        Request::NetSetting { key, value } => unit(WinSys.set_net_setting(key, &value)),
         Request::CleanCategory { category } => Ok(serde_json::to_value(crate::cleanup::clean_one(category)).unwrap_or_default()),
     }
 }

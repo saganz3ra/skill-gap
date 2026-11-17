@@ -5,7 +5,7 @@
 //! uma ação do usuário). Serviços do Modo Jogo, que acontecem no meio da partida, só
 //! usam o auxiliar se ele já estiver aberto.
 
-use super::ops::{GameSys, Hive, Sys};
+use super::ops::{GameSys, Hive, NetKey, Sys};
 use super::windows::WinSys;
 use crate::elevation::{self, Launch, Request};
 use crate::error::{AppError, AppResult};
@@ -116,6 +116,66 @@ impl Sys for ElevatedSys {
             |_| {},
             elevation::unit,
         )
+    }
+
+    fn power_value(&self, sub: &str, setting: &str) -> AppResult<Option<(String, u32)>> {
+        WinSys.power_value(sub, setting)
+    }
+
+    fn set_power_value(&self, plan: &str, sub: &str, setting: &str, ac: u32) -> AppResult<()> {
+        elevation::local_or_elevated(
+            || WinSys.set_power_value(plan, sub, setting, ac),
+            Request::PowerSetting { plan: plan.into(), sub: sub.into(), setting: setting.into(), value: ac },
+            Launch::OnDemand,
+            elevation::unit,
+        )
+    }
+
+    fn task_enabled(&self, path: &str) -> Option<bool> {
+        WinSys.task_enabled(path)
+    }
+
+    fn set_task_enabled(&self, path: &str, enabled: bool) -> AppResult<()> {
+        elevation::local_or_elevated(
+            || WinSys.set_task_enabled(path, enabled),
+            Request::TaskEnabled { path: path.into(), enabled },
+            Launch::OnDemand,
+            elevation::unit,
+        )
+    }
+
+    fn page_combining(&self) -> AppResult<bool> {
+        WinSys.page_combining()
+    }
+
+    fn set_page_combining(&self, enabled: bool) -> AppResult<()> {
+        elevation::admin_or_elevated(|| WinSys.set_page_combining(enabled), Request::PageCombining { enabled }, |_| {}, elevation::unit)
+    }
+
+    fn net_setting(&self, key: NetKey) -> AppResult<String> {
+        WinSys.net_setting(key)
+    }
+
+    fn set_net_setting(&self, key: NetKey, value: &str) -> AppResult<()> {
+        elevation::admin_or_elevated(
+            || WinSys.set_net_setting(key, value),
+            Request::NetSetting { key, value: value.into() },
+            |_| {},
+            elevation::unit,
+        )
+    }
+
+    // Arquivos do próprio usuário: nunca precisam de admin.
+    fn json_file_exists(&self, env: &str, file: &str) -> bool {
+        WinSys.json_file_exists(env, file)
+    }
+
+    fn json_key(&self, env: &str, file: &str, key: &str) -> AppResult<Option<String>> {
+        WinSys.json_key(env, file, key)
+    }
+
+    fn set_json_key(&self, env: &str, file: &str, key: &str, value: Option<&str>) -> AppResult<()> {
+        WinSys.set_json_key(env, file, key, value)
     }
 }
 
