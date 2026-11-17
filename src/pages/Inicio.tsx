@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { api, skippedByProfiles, CLEANUP_INFO, PLAN_INFO, type BatchReport, type RestoreOutcome } from "../lib/api";
+import { api, NEWS_SEEN_EVENT, skippedByProfiles, CLEANUP_INFO, PLAN_INFO, type BatchReport, type RestoreOutcome } from "../lib/api";
 import { formatBytes } from "../lib/format";
 import { useResource } from "../hooks/useResource";
 import { PageHeader } from "../components/ui";
 import { BatchSummary, friendlyError, RestoreNotice } from "../components/feedback";
+import { ReleaseCard } from "./Novidades";
 
 export function Inicio() {
   const startup = useResource(api.listStartupItems);
@@ -14,6 +15,8 @@ export function Inicio() {
   const tweaks = useResource(api.tweaksList);
   const profiles = useResource(api.profilesList);
   const sys = useResource(api.systemInfo);
+  const news = useResource(api.whatsNew);
+  const latestNews = news.data?.unseen[0];
 
   const [restorePoint, setRestorePoint] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"optimize" | "restore" | "undo" | null>(null);
@@ -72,6 +75,30 @@ export function Inicio() {
   return (
     <>
       <PageHeader eyebrow="Painel" title="Visão geral" subtitle="Analise o sistema e revise cada ajuste antes de aplicar." />
+
+      {news.data && latestNews && (
+        <div className="news-banner">
+          <ReleaseCard release={latestNews} fresh />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={async () => {
+                await api.whatsNewSeen().catch(() => undefined);
+                window.dispatchEvent(new Event(NEWS_SEEN_EVENT));
+                await news.reload();
+              }}
+            >
+              Entendi
+            </button>
+            {news.data.unseen.length > 1 && (
+              <Link to="/novidades" className="btn btn-ghost btn-sm" style={{ textDecoration: "none" }}>
+                Ver as {news.data.unseen.length} versões novas
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
 
       <section className="stat-grid" aria-label="Resumo">
         <Link to="/inicializacao" className="stat-card">

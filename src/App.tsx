@@ -13,6 +13,7 @@ import { Monitor } from "./pages/Monitor";
 import { Drivers } from "./pages/Drivers";
 import { Correcoes } from "./pages/Correcoes";
 import { Mouse } from "./pages/Mouse";
+import { Novidades } from "./pages/Novidades";
 
 // MemoryRouter: num app desktop não existe barra de endereço, então a rota fica só
 // em memória. Evita 404 ao recarregar uma rota interna no build de produção.
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="inicializacao" element={<Inicializacao />} />
             <Route path="desempenho" element={<Desempenho />} />
             <Route path="modo-jogo" element={<ModoJogo />} />
+            <Route path="novidades" element={<Novidades />} />
           </Route>
         </Routes>
       </MemoryRouter>

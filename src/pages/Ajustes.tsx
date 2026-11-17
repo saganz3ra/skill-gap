@@ -12,6 +12,8 @@ const FILTERS: Filter[] = ["todos", "favoritos", "geral", "aparencia", "desempen
 
 export function Ajustes() {
   const { data: tweaks, error, loading, reload, setData } = useResource(api.tweaksList);
+  const news = useResource(api.whatsNew);
+  const fresh = useMemo(() => new Set(news.data?.newTweaks ?? []), [news.data]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("todos");
   const [busy, setBusy] = useState<string | null>(null);
@@ -170,6 +172,7 @@ export function Ajustes() {
           <TweakCard
             key={t.id}
             tweak={t}
+            fresh={fresh.has(t.id)}
             busy={busy === t.id || busy === "*"}
             onToggle={(on) => void toggle(t, on)}
             confirming={confirming === t.id}
@@ -197,6 +200,7 @@ const STATE_BADGE: Record<TweakView["state"], [string, string] | null> = {
 function TweakCard({
   tweak: t,
   busy,
+  fresh,
   onToggle,
   onFavorite,
   confirming,
@@ -205,6 +209,8 @@ function TweakCard({
 }: {
   tweak: TweakView;
   busy: boolean;
+  /** Entrou depois da última versão que o usuário abriu. */
+  fresh: boolean;
   onToggle: (on: boolean) => void;
   onFavorite: () => void;
   confirming: boolean;
@@ -238,6 +244,7 @@ function TweakCard({
       <p className="tweak-desc">{t.description}</p>
 
       <div className="tweak-badges">
+        {fresh && <span className="badge badge-info">Novo</span>}
         <span className="badge badge-idle">{CATEGORY_LABEL[t.category]}</span>
         {t.impact === "small" && <span className="badge badge-warn">Efeito pequeno</span>}
         {t.impact === "high" && <span className="badge badge-ok">Efeito alto</span>}

@@ -16,12 +16,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Tag confere com a versão do app
+      - name: Tag confere com a versão do app e com o CHANGELOG
         shell: pwsh
         run: |
           $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           if ("v$version" -ne "${{ github.ref_name }}") {
             Write-Error "A tag ${{ github.ref_name }} não bate com a versão $version do tauri.conf.json"
+            exit 1
+          }
+          # A primeira entrada do CHANGELOG.json é a versão lançada e precisa de data:
+          # sem ela, a tela de novidades mostraria "em desenvolvimento" pra todo mundo.
+          $latest = (Get-Content CHANGELOG.json -Raw | ConvertFrom-Json)[0]
+          if ($latest.version -ne $version -or -not $latest.date) {
+            Write-Error "CHANGELOG.json: a primeira entrada precisa ser $version com a data de lançamento preenchida"
             exit 1
           }
 

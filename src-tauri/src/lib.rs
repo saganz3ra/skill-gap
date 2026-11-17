@@ -7,6 +7,7 @@ mod error;
 mod fixes;
 mod gaming;
 mod monitor;
+mod news;
 mod power;
 mod restore;
 mod startup;
@@ -250,6 +251,16 @@ async fn open_system_protection() -> AppResult<()> {
 }
 
 #[tauri::command]
+fn whats_new(app: tauri::AppHandle) -> news::WhatsNew {
+    app.state::<news::NewsState>().whats_new()
+}
+
+#[tauri::command]
+fn whats_new_seen(app: tauri::AppHandle) -> AppResult<()> {
+    app.state::<news::NewsState>().mark_seen()
+}
+
+#[tauri::command]
 fn elevation_status() -> elevation::ElevationStatus {
     elevation::status()
 }
@@ -407,6 +418,7 @@ pub fn run() {
             app.manage(tweaks::TweakEngine::load(tweaks::platform_sys(), journal));
             app.manage(power::plans::EnergyState::load(dir.join("energia.json")));
             app.manage(restore::RestoreState::load(dir.join("ponto-restauracao.json")));
+            app.manage(news::NewsState::load(dir.join("novidades.json")));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -449,7 +461,9 @@ pub fn run() {
             boot_report,
             bloat_list,
             bloat_remove,
-            elevation_status
+            elevation_status,
+            whats_new,
+            whats_new_seen
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Skill Gap");

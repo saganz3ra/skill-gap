@@ -1,0 +1,46 @@
+[
+  {
+    "version": "0.2.0",
+    "date": null,
+    "items": [
+      {
+        "kind": "correcao",
+        "text": "Ponto de restauração honesto: o app diz se criou um ponto novo, se o Windows reaproveitou um das últimas 24 h (com a data) ou se a Proteção do Sistema está desligada. Com a proteção desligada, o perfil não é aplicado."
+      },
+      {
+        "kind": "melhoria",
+        "text": "Cada ajuste diz se serve para o seu PC (versão do Windows, RAM, SSD, notebook) e por quê. Ajuste indisponível não pode ser aplicado, mas sempre pode ser desfeito."
+      },
+      {
+        "kind": "melhoria",
+        "text": "Risco separado do efeito: ajustes de risco médio ou alto mostram o que podem afetar. Risco alto pede confirmação."
+      },
+      {
+        "kind": "mudanca",
+        "text": "Ajustes que esquentam ou gastam mais energia (como o plano Alto desempenho) saíram dos perfis prontos. Continuam disponíveis para aplicar um a um."
+      },
+      {
+        "kind": "novo",
+        "text": "Perfis mostram a taxa de atualização do monitor e têm o botão Reanalisar."
+      },
+      {
+        "kind": "novo",
+        "text": "Tela de novidades e selo \"Novo\" nos ajustes que entraram desde a última versão que você abriu."
+      }
+    ]
+  },
+  {
+    "version": "0.1.0",
+    "date": "2026-11-17",
+    "items": [
+      {
+        "kind": "novo",
+        "text": "Primeira versão: ajustes reversíveis e perfis, Modo Jogo, Monitor, Drivers, Correções, Energia, Mouse, Inicialização e Limpeza."
+      },
+      {
+        "kind": "novo",
+        "text": "Admin sob demanda: o app roda como usuário comum e o Windows só pede permissão quando uma ação precisa."
+      }
+    ]
+  }
+]
