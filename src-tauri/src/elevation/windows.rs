@@ -52,7 +52,7 @@ pub fn is_running() -> bool {
 }
 
 /// 128 bits aleatórios do gerador do sistema, em hexadecimal.
-fn random_hex() -> AppResult<String> {
+pub fn random_hex() -> AppResult<String> {
     let mut buf = [0u8; 16];
     let status = unsafe { BCryptGenRandom(std::ptr::null_mut(), buf.as_mut_ptr(), buf.len() as u32, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
     if status != 0 {
@@ -62,7 +62,7 @@ fn random_hex() -> AppResult<String> {
 }
 
 /// SID do usuário que roda o app (ex.: S-1-5-21-...). O auxiliar libera o pipe só pra ele.
-fn current_user_sid() -> AppResult<String> {
+pub fn current_user_sid() -> AppResult<String> {
     unsafe {
         let mut token: HANDLE = std::ptr::null_mut();
         if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
@@ -224,6 +224,7 @@ fn execute(req: Request, mut progress: impl FnMut(serde_json::Value)) -> AppResu
         Request::PowerSetting { plan, sub, setting, value } => unit(WinSys.set_power_value(&plan, &sub, &setting, value)),
         Request::TaskEnabled { path, enabled } => unit(WinSys.set_task_enabled(&path, enabled)),
         Request::PageCombining { enabled } => unit(WinSys.set_page_combining(enabled)),
+        Request::PerfLogGroup { sid, add } => unit(crate::telemetry::presentmon::set_perf_group(&sid, add)),
         Request::AppxManifest { name } => crate::apps::provisioned_manifest(&name).map(serde_json::Value::String),
         Request::MsiWrite { instance_id, value } => unit(crate::hardware::msi_write(&instance_id, value)),
         Request::QosSet { exe, enabled } => unit(crate::hardware::qos_set(&exe, enabled)),

@@ -177,6 +177,8 @@ pub struct Journal {
     pub nic: BTreeMap<String, String>,
     /// Caminho do exe → preferência de GPU anterior.
     pub gpu: BTreeMap<String, Option<String>>,
+    /// O app colocou o usuário no grupo "Usuários de log de desempenho".
+    pub perf_log_users: bool,
     /// "Do not use NLA" antes da primeira política QoS (`Some(None)` = não existia).
     pub nla: Option<Option<String>>,
 }

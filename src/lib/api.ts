@@ -270,6 +270,27 @@ export interface NicProperty {
   display: string[];
 }
 
+export interface Telemetry {
+  sample: MonitorSample | null;
+  gpuTemp: number | null;
+  ping: { lastMs: number | null; avgMs: number | null; jitterMs: number | null; lossPct: number; target: number[] };
+  frames: { fps: number; frametimeMs: number; varMs: number } | null;
+  game: string | null;
+}
+
+export interface PresentMonStatus {
+  version: string;
+  installed: boolean;
+  canCapture: boolean;
+  needsLogoff: boolean;
+  capturing: string | null;
+}
+
+export interface RemoteInfo {
+  url: string;
+  port: number;
+}
+
 export type Gate = { status: "ok" } | { status: "warn"; reason: string } | { status: "unavailable"; reason: string };
 
 /** Mesma regra do backend (`profile_skip_reason`): o que um perfil pula. */
@@ -342,6 +363,8 @@ export interface MonitorSample {
   diskWrite: number;
   netDown: number;
   netUp: number;
+  /** Zona térmica ACPI mais quente, °C (aproximada). */
+  cpuTemp: number | null;
 }
 
 export interface HardwareInfo {
@@ -492,6 +515,14 @@ export const api = {
   gameWatchSave: (config: WatchConfig) => invoke<WatchStatus>("game_watch_save", { config }),
   listRunningProcesses: () => invoke<string[]>("list_running_processes"),
   timerMeasure: () => invoke<TimerReport>("timer_measure"),
+  telemetrySample: () => invoke<Telemetry>("telemetry_sample"),
+  overlayShow: (show: boolean) => invoke<void>("overlay_show", { show }),
+  pmStatus: () => invoke<PresentMonStatus>("pm_status"),
+  pmInstall: () => invoke<void>("pm_install"),
+  pmPermission: (add: boolean) => invoke<void>("pm_permission", { add }),
+  remoteStart: () => invoke<RemoteInfo>("remote_start"),
+  remoteStop: () => invoke<void>("remote_stop"),
+  remoteStatus: () => invoke<RemoteInfo | null>("remote_status"),
   /** [dispositivos, InstanceIds com valor anotado pelo app] */
   hwMsiList: () => invoke<[MsiDevice[], string[]]>("hw_msi_list"),
   hwMsiSet: (instanceId: string, enabled: boolean) => invoke<void>("hw_msi_set", { instanceId, enabled }),

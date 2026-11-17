@@ -34,6 +34,7 @@ pub struct Pdh {
     vram: Option<isize>,
     net_down: isize,
     net_up: isize,
+    thermal: Option<isize>,
 }
 
 impl Pdh {
@@ -65,6 +66,8 @@ impl Pdh {
             vram: add(r"\GPU Adapter Memory(*)\Dedicated Usage"),
             net_down: required(r"\Network Interface(*)\Bytes Received/sec")?,
             net_up: required(r"\Network Interface(*)\Bytes Sent/sec")?,
+            // Kelvin. Nem toda placa-mãe expõe zona térmica.
+            thermal: add(r"\Thermal Zone Information(*)\Temperature"),
         };
         // Primeira leitura: base pros contadores de taxa.
         unsafe { PdhCollectQueryData(pdh.query) };
@@ -121,6 +124,12 @@ impl Pdh {
             disk_write: self.value(self.disk_write).unwrap_or(0.0),
             net_down: self.values(self.net_down).iter().sum(),
             net_up: self.values(self.net_up).iter().sum(),
+            cpu_temp: self
+                .thermal
+                .map(|c| self.values(c))
+                .and_then(|v| v.into_iter().fold(None, |m: Option<f64>, x| Some(m.map_or(x, |m| m.max(x)))))
+                .map(|k| k - 273.15)
+                .filter(|c| (1.0..130.0).contains(c)),
         }
     }
 }

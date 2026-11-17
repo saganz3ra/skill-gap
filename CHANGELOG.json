@@ -66,6 +66,18 @@
       {
         "kind": "novo",
         "text": "Relatório para suporte no Diagnóstico: um texto com a máquina e o que o app mudou, sem nome de usuário nem e-mail."
+      },
+      {
+        "kind": "novo",
+        "text": "Overlay no canto da tela (Monitor): FPS, frametime, CPU, GPU, temperaturas e ping. Janela transparente que deixa o clique passar; não injeta nada no jogo."
+      },
+      {
+        "kind": "novo",
+        "text": "FPS medido pelo PresentMon da Intel, baixado uma vez do GitHub oficial e conferido (hash fixo + assinatura da Intel) antes de cada uso."
+      },
+      {
+        "kind": "novo",
+        "text": "Segunda tela no celular: QR code com endereço só da rede local, chave nova a cada vez, desliga junto com o interruptor."
       }
     ]
   },

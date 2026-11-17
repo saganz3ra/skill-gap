@@ -1256,3 +1256,35 @@ a.btn-ghost {
 .ok-text {
   color: var(--ok);
 }
+
+/* Overlay: janela transparente, nada além do painel */
+html.overlay-root,
+html.overlay-root body,
+html.overlay-root #root {
+  background: transparent !important;
+  overflow: hidden;
+}
+.overlay-panel {
+  margin: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(10, 8, 8, 0.72);
+  color: #f4efef;
+  font: 12px/1.35 system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  width: fit-content;
+  min-width: 190px;
+}
+.overlay-fps {
+  font-size: 22px;
+  font-weight: 700;
+}
+.overlay-fps span {
+  font-size: 11px;
+  color: #e5383b;
+  letter-spacing: 0.08em;
+}
+.overlay-sub,
+.overlay-row {
+  color: #cfc7c7;
+}
