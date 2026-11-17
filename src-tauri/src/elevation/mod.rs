@@ -47,6 +47,8 @@ pub enum Request {
     /// Liga/desliga tarefa agendada (só as do catálogo).
     TaskEnabled { path: String, enabled: bool },
     PageCombining { enabled: bool },
+    /// Só LÊ onde está a cópia provisionada de um app da lista curada.
+    AppxManifest { name: String },
     /// `MSISupported` de um dispositivo PCI (o auxiliar confere na listagem atual).
     MsiWrite { instance_id: String, value: Option<u32> },
     /// Política QoS do app para um exe.
@@ -171,6 +173,7 @@ pub fn check(req: &Request) -> Result<(), String> {
         }
         Request::TaskEnabled { path, .. } => task_allowed(all_ops(), path),
         Request::PageCombining { .. } => true,
+        Request::AppxManifest { name } => crate::apps::find(name).is_some(),
         Request::MsiWrite { instance_id, value } => crate::hardware::is_pci_instance(instance_id) && matches!(value, None | Some(0) | Some(1)),
         Request::QosSet { exe, .. } => crate::hardware::qos_name(exe).is_some(),
         Request::QosNla { value } => matches!(value.as_deref(), None | Some("0") | Some("1")),

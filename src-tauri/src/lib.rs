@@ -647,6 +647,131 @@ async fn bloat_remove(name: String) -> AppResult<()> {
     blocking(move || apps::remove(&name)).await
 }
 
+/// Reinstala um app removido a partir da cópia provisionada do próprio PC. O caminho
+/// é lido do Windows na hora (no auxiliar elevado), nunca de um diário.
+#[tauri::command]
+async fn bloat_restore(name: String) -> AppResult<()> {
+    blocking(move || {
+        let manifest = elevation::admin_or_elevated(
+            || apps::provisioned_manifest(&name),
+            elevation::Request::AppxManifest { name: name.clone() },
+            |_| {},
+            |v| v.as_str().map(String::from).ok_or_else(|| AppError::Helper("resposta inválida".into())),
+        )?;
+        // Registra no usuário ATUAL (sem elevação): é pra ele que o app volta.
+        apps::register_manifest(&manifest)
+    })
+    .await
+}
+
+// ---------------- Guardião e relatório ----------------
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Undone {
+    id: &'static str,
+    name: &'static str,
+}
+
+#[tauri::command]
+async fn guardian_status(app: tauri::AppHandle) -> AppResult<Vec<Undone>> {
+    blocking(move || {
+        Ok(engine(&app)
+            .undone_by_windows()
+            .into_iter()
+            .filter_map(|id| tweaks::catalog::find(id).map(|t| Undone { id, name: t.name }))
+            .collect())
+    })
+    .await
+}
+
+/// Reaplica o que o Windows desfez (escolha já feita pelo usuário antes).
+#[tauri::command]
+async fn guardian_reapply(app: tauri::AppHandle) -> AppResult<tweaks::BatchReport> {
+    blocking(move || {
+        let sys = sys_profile(&app, false);
+        let e = engine(&app);
+        let mut report = tweaks::BatchReport { applied: vec![], skipped: vec![], failed: vec![], restart: tweaks::catalog::Restart::None };
+        for id in e.undone_by_windows() {
+            match e.apply_checked(id, &sys, true) {
+                Ok(()) => {
+                    if let Some(t) = tweaks::catalog::find(id) {
+                        report.restart = report.restart.max(t.restart);
+                    }
+                    report.applied.push(id.to_string());
+                }
+                Err(err) => report.failed.push(tweaks::Failure { id: id.to_string(), error: err.to_string() }),
+            }
+        }
+        Ok(report)
+    })
+    .await
+}
+
+/// Texto para colar num chamado: máquina e o que o app mudou. Sem nome de usuário,
+/// e-mail nem caminhos de pasta pessoal.
+#[tauri::command]
+async fn support_report(app: tauri::AppHandle) -> AppResult<String> {
+    blocking(move || {
+        let p = sys_profile(&app, false);
+        let views = engine(&app).list(&p);
+        let active: Vec<&str> = views.iter().filter(|v| v.can_revert).map(|v| v.id).collect();
+        let undone = engine(&app).undone_by_windows();
+        let hw = hw(&app).snapshot();
+        let plan = power::active().map(|a| a.name).unwrap_or_else(|_| "?".into());
+        let (diag, _) = read_now(&app);
+        let watch = app.state::<Arc<Watcher>>().status().config;
+        let mut t = String::new();
+        t += &format!("Skill Gap {}\n", news::CURRENT);
+        t += &format!("Windows: {} (build {})\n", p.windows, p.build);
+        t += &format!("Tipo: {} · RAM {} GB · disco do sistema {:?}\n", if p.is_laptop { "notebook" } else { "desktop" }, p.ram_gb, p.system_disk);
+        t += &format!("Plano de energia: {plan}\n");
+        t += &format!("Potencial de otimização: {}/100\n", diag.potential);
+        t += &format!("Ajustes aplicados pelo app ({}): {}\n", active.len(), active.join(", "));
+        if !undone.is_empty() {
+            t += &format!("Desfeitos pelo Windows: {}\n", undone.join(", "));
+        }
+        t += &format!(
+            "Hardware: MSI em {} dispositivo(s), tela cheia clássica em {} jogo(s), QoS em {} jogo(s), GPU de alto desempenho em {} jogo(s), {} propriedade(s) de rede\n",
+            hw.msi.len(),
+            hw.fse.len(),
+            hw.qos.len(),
+            hw.gpu.len(),
+            hw.nic.len()
+        );
+        t += &format!(
+            "Modo Jogo: {} · {} jogo(s) · timer {} · detecção por pasta {}\n",
+            if watch.enabled { "ligado" } else { "desligado" },
+            watch.games.len(),
+            if watch.timer_mode { "sim" } else { "não" },
+            if watch.auto_detect { "sim" } else { "não" }
+        );
+        Ok(t)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn hw_gpu_set(app: tauri::AppHandle, exe_path: String, enabled: bool) -> AppResult<()> {
+    blocking(move || {
+        let exe = steam_exe(&exe_path)?;
+        if enabled {
+            let prev = hardware::gpu_read(&exe);
+            hw(&app).record(|j| {
+                j.gpu.entry(exe.clone()).or_insert(prev.clone());
+            })?;
+            hardware::gpu_write(&exe, Some(hardware::GPU_HIGH))
+        } else {
+            let prev = hw(&app).snapshot().gpu.get(&exe).cloned().ok_or_else(|| hardware::invalid("nada a desfazer neste jogo"))?;
+            hardware::gpu_write(&exe, prev.as_deref())?;
+            hw(&app).record(|j| {
+                j.gpu.remove(&exe);
+            })
+        }
+    })
+    .await
+}
+
 /// Entrada do processo auxiliar elevado (ver `elevation`).
 pub fn run_elevated_helper(args: &[String]) -> i32 {
     elevation::helper_main(args)
@@ -745,7 +870,12 @@ pub fn run() {
             hw_fse_set,
             hw_qos_set,
             hw_nic_list,
-            hw_nic_set
+            hw_nic_set,
+            hw_gpu_set,
+            bloat_restore,
+            guardian_status,
+            guardian_reapply,
+            support_report
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Skill Gap");
