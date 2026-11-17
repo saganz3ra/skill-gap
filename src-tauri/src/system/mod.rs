@@ -133,7 +133,30 @@ pub fn parse_media_type(s: &str) -> DiskKind {
 }
 
 #[cfg(windows)]
-pub use windows::{is_admin, powershell, read_profile, restart_explorer};
+pub use windows::{is_admin, powershell, ram_used, read_profile, restart_explorer, running_services};
+
+#[cfg(not(windows))]
+pub fn ram_used() -> Option<u64> {
+    None
+}
+#[cfg(not(windows))]
+pub fn running_services() -> Option<usize> {
+    None
+}
+
+/// hiberfil.sys existe no disco do sistema? O arquivo fica bloqueado pelo Windows:
+/// "acesso negado" também significa que ele existe.
+pub fn hiberfil_present() -> Option<bool> {
+    if !cfg!(windows) {
+        return None;
+    }
+    let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
+    match std::fs::metadata(format!(r"{drive}\hiberfil.sys")) {
+        Ok(_) => Some(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(false),
+        Err(_) => Some(true),
+    }
+}
 
 #[cfg(not(windows))]
 pub fn read_profile() -> SystemProfile {

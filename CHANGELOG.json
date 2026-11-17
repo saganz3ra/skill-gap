@@ -18,6 +18,10 @@
       {
         "kind": "melhoria",
         "text": "Serviços guardam também o início atrasado, e o desfazer de configurações de energia volta no mesmo plano em que foi feito."
+      },
+      {
+        "kind": "novo",
+        "text": "Tela Diagnóstico: nota de potencial de otimização (0 a 100) lida do Windows, com a lista do que falta, e a comparação com a primeira leitura separando números firmes (inicialização, serviços, plano, ajustes, espaço liberado) de leituras do momento (RAM, processos)."
       }
     ]
   },

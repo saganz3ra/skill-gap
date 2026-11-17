@@ -1215,3 +1215,44 @@ a.btn-ghost {
   border-radius: 50%;
   background: var(--accent);
 }
+
+/* Diagnóstico */
+.diag-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.diag-list li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  line-height: 1.45;
+}
+.diag-list svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.cmp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.cmp-table th,
+.cmp-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.cmp-table th {
+  color: var(--muted);
+  font-weight: 500;
+}
+.cmp-table td:nth-child(2),
+.cmp-table td:nth-child(3) {
+  font-variant-numeric: tabular-nums;
+}
+.ok-text {
+  color: var(--ok);
+}
