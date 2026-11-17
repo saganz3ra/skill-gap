@@ -16,6 +16,7 @@ import {
   Wrench,
   Zap,
   type LucideIcon,
+  Gauge,
 } from "lucide-react";
 
 const NAV: { group: string; items: { to: string; label: string; icon: LucideIcon; end?: boolean }[] }[] = [
@@ -23,6 +24,7 @@ const NAV: { group: string; items: { to: string; label: string; icon: LucideIcon
     group: "Geral",
     items: [
       { to: "/", label: "Início", icon: House, end: true },
+      { to: "/diagnostico", label: "Diagnóstico", icon: Gauge },
       { to: "/monitor", label: "Monitor", icon: Activity },
       { to: "/perfis", label: "Perfis", icon: LayoutGrid },
     ],

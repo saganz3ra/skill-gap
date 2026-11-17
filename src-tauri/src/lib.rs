@@ -1,6 +1,7 @@
 mod apps;
 mod bootperf;
 mod cleanup;
+mod diagnosis;
 mod drivers;
 mod elevation;
 mod error;
@@ -95,6 +96,7 @@ async fn run_cleanup(
                 let _ = app.emit("cleanup-progress", result);
             },
         ))
+        .inspect(|report: &cleanup::CleanupReport| app.state::<diagnosis::BaselineState>().add_cleaned(report.freed_bytes))
     })
     .await
 }
@@ -378,6 +380,63 @@ async fn net_discard(app: tauri::AppHandle) -> AppResult<()> {
     blocking(move || app.state::<netcfg::NetState>().discard()).await
 }
 
+// ---------------- Diagnóstico e resultado ----------------
+
+const SKILLGAP_PLANS: [&str; 2] = ["9f3c1e2a-7b4d-4c8e-a1f0-5d2b8c6e4a01", "9f3c1e2a-7b4d-4c8e-a1f0-5d2b8c6e4a02"];
+
+/// Lê o Windows de verdade e monta diagnóstico + leitura (sem nada do histórico do app).
+fn read_now(app: &tauri::AppHandle) -> (diagnosis::Diagnosis, diagnosis::Reading) {
+    let profile = sys_profile(app, false);
+    let views = engine(app).list(&profile);
+    let states = views.iter().map(|v| (v.id, v.state)).collect();
+    let game = tweaks::platform_game_sys();
+    let plan = power::active().ok();
+    let startup_enabled = startup::list().ok().map(|items| items.iter().filter(|i| i.enabled).count());
+    let extras = diagnosis::Extras {
+        diagtrack_running: game.service_running("DiagTrack"),
+        sysmain_running: game.service_running("SysMain"),
+        wsearch_running: game.service_running("WSearch"),
+        hiberfil: system::hiberfil_present(),
+        performance_plan: plan.as_ref().map(|p| {
+            p.plan == Some(power::PowerPlan::HighPerformance) || SKILLGAP_PLANS.iter().any(|g| g.eq_ignore_ascii_case(&p.guid))
+        }),
+        startup_enabled,
+        is_laptop: profile.is_laptop,
+        hdd: profile.system_disk == system::DiskKind::Hdd,
+    };
+    let d = diagnosis::build(&states, &extras);
+    let reading = diagnosis::Reading {
+        at: restore::now(),
+        potential: d.potential,
+        startup_enabled,
+        services_running: system::running_services(),
+        power_plan: plan.map(|p| p.name),
+        tweaks_applied: views.iter().filter(|v| v.state == tweaks::TweakState::Active).count(),
+        ram_used: system::ram_used(),
+        processes: game.processes().len(),
+    };
+    (d, reading)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagnosisReport {
+    diagnosis: diagnosis::Diagnosis,
+    comparison: diagnosis::Comparison,
+}
+
+#[tauri::command]
+async fn diagnosis_run(app: tauri::AppHandle) -> AppResult<DiagnosisReport> {
+    blocking(move || {
+        let (d, reading) = read_now(&app);
+        let base = app.state::<diagnosis::BaselineState>();
+        let has_changes = engine(&app).list(&sys_profile(&app, false)).iter().any(|v| v.can_revert);
+        let _ = base.ensure(reading.clone(), has_changes);
+        Ok(DiagnosisReport { diagnosis: d, comparison: base.comparison(&reading) })
+    })
+    .await
+}
+
 // ---------------- Energia, boot e apps de fábrica ----------------
 
 fn energy(app: &tauri::AppHandle) -> tauri::State<'_, power::plans::EnergyState> {
@@ -457,6 +516,14 @@ pub fn run() {
             app.manage(restore::RestoreState::load(dir.join("ponto-restauracao.json")));
             app.manage(news::NewsState::load(dir.join("novidades.json")));
             app.manage(netcfg::NetState::load(dir.join("rede-antes-do-reset.json")));
+            app.manage(diagnosis::BaselineState::load(dir.join("linha-de-base.json")));
+            // Primeira leitura logo ao abrir (antes de o usuário mexer em algo), em segundo plano.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let (_, reading) = read_now(&handle);
+                let has_changes = handle.state::<tweaks::TweakEngine>().list(&sys_profile(&handle, false)).iter().any(|v| v.can_revert);
+                let _ = handle.state::<diagnosis::BaselineState>().ensure(reading, has_changes);
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -504,7 +571,8 @@ pub fn run() {
             whats_new_seen,
             net_reset_status,
             net_restore,
-            net_discard
+            net_discard,
+            diagnosis_run
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Skill Gap");

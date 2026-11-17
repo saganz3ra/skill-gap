@@ -97,6 +97,18 @@ fn system_disk() -> super::DiskKind {
     powershell(script).map(|s| parse_media_type(&s)).unwrap_or(super::DiskKind::Unknown)
 }
 
+/// Bytes de RAM em uso agora.
+pub fn ram_used() -> Option<u64> {
+    let mut mem: MEMORYSTATUSEX = unsafe { zeroed() };
+    mem.dwLength = size_of::<MEMORYSTATUSEX>() as u32;
+    (unsafe { GlobalMemoryStatusEx(&mut mem) } != 0).then(|| mem.ullTotalPhys.saturating_sub(mem.ullAvailPhys))
+}
+
+/// Quantos serviços estão rodando (uma leitura de ~1 s).
+pub fn running_services() -> Option<usize> {
+    powershell("(Get-Service | Where-Object Status -eq 'Running').Count").ok()?.trim().parse().ok()
+}
+
 pub fn read_profile() -> SystemProfile {
     let (windows, build) = windows_version();
     SystemProfile { windows, build, is_laptop: is_laptop(), ram_gb: ram_gb(), system_disk: system_disk() }
