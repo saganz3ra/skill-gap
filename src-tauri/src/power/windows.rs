@@ -14,14 +14,14 @@ fn powercfg(args: &[&str]) -> AppResult<String> {
         .creation_flags(CREATE_NO_WINDOW)
         .output()?;
 
-    // O powercfg escreve na code page OEM do console (CP850 no Windows em português).
-    // O GUID é ASCII, então a conversão "lossy" não atrapalha a leitura dele.
-    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    // O powercfg escreve na code page OEM do console (CP850 no Windows em português):
+    // sem converter, "Desempenho Máximo" chegaria na tela como "Desempenho M�ximo".
+    let stdout = crate::system::decode_console(&out.stdout);
     if out.status.success() {
         Ok(stdout)
     } else {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        let detail = if stderr.trim().is_empty() { stdout } else { stderr.into_owned() };
+        let stderr = crate::system::decode_console(&out.stderr);
+        let detail = if stderr.trim().is_empty() { stdout } else { stderr };
         Err(AppError::CommandFailed {
             command: format!("powercfg {}", args.join(" ")),
             detail: detail.trim().to_string(),
