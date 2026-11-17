@@ -42,6 +42,8 @@ pub enum Request {
     DriversBackup,
     BootReport,
     RunFix { id: String },
+    /// Recoloca IP/DNS fixos de um adaptador depois do "Resetar a rede".
+    RestoreNetwork { adapter: crate::netcfg::AdapterConfig },
     CleanCategory { category: CleanupCategory },
 }
 
@@ -124,6 +126,7 @@ pub fn check(req: &Request) -> Result<(), String> {
             matches!(s, StartupSource::MachineRun | StartupSource::MachineRun32 | StartupSource::CommonFolder)
         }),
         Request::RunFix { id } => crate::fixes::find(id).is_some(),
+        Request::RestoreNetwork { adapter } => crate::netcfg::validate(adapter).is_ok(),
         Request::CleanCategory { category } => category.requires_admin(),
         Request::MemoryCompression { .. } | Request::RestorePoint | Request::DriversBackup | Request::BootReport => true,
     };
@@ -250,6 +253,20 @@ mod tests {
         assert!(check(&dword(&service_path("WinDefend"), "Start")).is_err());
         assert!(check(&Request::SetStartupApproved { id: "machineRun::RtkAudUService".into(), enabled: false }).is_ok());
         assert!(check(&Request::SetStartupApproved { id: "userRun::Steam".into(), enabled: false }).is_err(), "HKCU não precisa de admin");
+    }
+
+    #[test]
+    fn restaurar_rede_so_com_enderecos_validos() {
+        let ok = crate::netcfg::AdapterConfig {
+            guid: "{4d36e972-e325-11ce-bfc1-08002be10318}".into(),
+            name: "Ethernet".into(),
+            ipv4: None,
+            dns4: vec!["1.1.1.1".into()],
+            dns6: vec![],
+        };
+        assert!(check(&Request::RestoreNetwork { adapter: ok.clone() }).is_ok());
+        let bad = crate::netcfg::AdapterConfig { dns4: vec!["1.1.1.1\" & calc".into()], ..ok };
+        assert!(check(&Request::RestoreNetwork { adapter: bad }).is_err());
     }
 
     #[test]

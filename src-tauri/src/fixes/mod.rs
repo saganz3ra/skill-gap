@@ -59,7 +59,7 @@ pub static FIXES: &[Fix] = &[
         id: "network_reset",
         name: "Resetar a rede",
         description: "Volta Winsock e TCP/IP ao padrão de fábrica do Windows.",
-        when: "Internet funciona no celular mas não no PC, mesmo com cabo/Wi-Fi conectado. VPN e proxy configurados à mão podem precisar ser refeitos.",
+        when: "Internet funciona no celular mas não no PC, mesmo com cabo/Wi-Fi conectado. Apaga IP e DNS fixos: o app guarda os seus antes e oferece restaurar depois de reiniciar. VPN e proxy podem precisar ser refeitos.",
         requires_admin: true,
         restart: Restart::Reboot,
         duration: "alguns segundos",

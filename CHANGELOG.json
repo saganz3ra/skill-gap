@@ -1,11 +1,15 @@
 [
   {
     "version": "0.2.0",
-    "date": null,
+    "date": "2026-11-17",
     "items": [
       {
         "kind": "correcao",
         "text": "Ponto de restauração honesto: o app diz se criou um ponto novo, se o Windows reaproveitou um das últimas 24 h (com a data) ou se a Proteção do Sistema está desligada. Com a proteção desligada, o perfil não é aplicado."
+      },
+      {
+        "kind": "correcao",
+        "text": "\"Resetar a rede\" agora é reversível: antes de rodar, o app guarda o IP e o DNS que você configurou à mão em cada adaptador e, depois de reiniciar, oferece restaurar. Também impede rodar o reset de novo antes de reiniciar."
       },
       {
         "kind": "melhoria",
