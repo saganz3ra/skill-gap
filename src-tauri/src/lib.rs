@@ -105,7 +105,7 @@ async fn gaming_diagnose(app: tauri::AppHandle) -> AppResult<gaming::GamingRepor
 
 #[tauri::command]
 async fn gaming_fix(app: tauri::AppHandle, id: gaming::CheckId) -> AppResult<()> {
-    blocking(move || gaming::fix(&app.state::<gaming::GamingState>(), &engine(&app), id)).await
+    blocking(move || gaming::fix(&app.state::<gaming::GamingState>(), &engine(&app), &sys_profile(&app, false), id)).await
 }
 
 #[tauri::command]
@@ -146,14 +146,20 @@ fn engine(app: &tauri::AppHandle) -> tauri::State<'_, tweaks::TweakEngine> {
     app.state::<tweaks::TweakEngine>()
 }
 
-#[tauri::command]
-async fn tweaks_list(app: tauri::AppHandle) -> AppResult<Vec<tweaks::TweakView>> {
-    blocking(move || Ok(engine(&app).list())).await
+/// Fatos do PC, em cache (o tipo de disco custa um PowerShell).
+fn sys_profile(app: &tauri::AppHandle, refresh: bool) -> system::SystemProfile {
+    app.state::<system::SystemCache>().get(refresh)
 }
 
 #[tauri::command]
-async fn tweak_apply(app: tauri::AppHandle, id: String) -> AppResult<()> {
-    blocking(move || engine(&app).apply(&id)).await
+async fn tweaks_list(app: tauri::AppHandle) -> AppResult<Vec<tweaks::TweakView>> {
+    blocking(move || Ok(engine(&app).list(&sys_profile(&app, false)))).await
+}
+
+/// `confirmed`: o usuário confirmou um ajuste de risco alto (conferido no backend).
+#[tauri::command]
+async fn tweak_apply(app: tauri::AppHandle, id: String, confirmed: Option<bool>) -> AppResult<()> {
+    blocking(move || engine(&app).apply_checked(&id, &sys_profile(&app, false), confirmed.unwrap_or(false))).await
 }
 
 #[tauri::command]
@@ -194,7 +200,7 @@ async fn profile_apply(app: tauri::AppHandle, id: String, restore_point: bool) -
         if outcome == Some(restore::Outcome::ProtectionOff) {
             return Ok(ProfileApplyResult { restore_point: outcome, report: None });
         }
-        let report = engine(&app).apply_profile(&id, system::is_laptop())?;
+        let report = engine(&app).apply_profile(&id, &sys_profile(&app, false))?;
         Ok(ProfileApplyResult { restore_point: outcome, report: Some(report) })
     })
     .await
@@ -211,8 +217,15 @@ async fn profile_delete(app: tauri::AppHandle, id: String) -> AppResult<()> {
 }
 
 #[tauri::command]
-async fn system_info() -> AppResult<system::SystemInfo> {
-    blocking(|| Ok(system::info())).await
+/// `refresh`: botão "Reanalisar" (relê o hardware; o monitor é sempre lido na hora).
+async fn system_info(app: tauri::AppHandle, refresh: Option<bool>) -> AppResult<system::SystemInfo> {
+    blocking(move || {
+        let profile = sys_profile(&app, refresh.unwrap_or(false));
+        // Monitor principal: o primeiro da lista do Windows.
+        let display = gaming::displays().into_iter().next().map(|d| (d.current.hz, d.max_hz));
+        Ok(system::build_info(&profile, system::is_admin(), display))
+    })
+    .await
 }
 
 /// `manual`: clique em "Criar ponto" (sempre pergunta ao Windows). Automático (antes
@@ -374,6 +387,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .manage(gaming::GamingState::default())
         .manage(monitor::MonitorState::default())
+        .manage(system::SystemCache::default())
         .manage(FixLock(AtomicBool::new(false)))
         .setup(|app| {
             // Configs e diários em %APPDATA%\app.skillgap.desktop\

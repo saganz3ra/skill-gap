@@ -23,6 +23,14 @@ pub enum AppError {
     #[error("{0}")]
     Helper(String),
 
+    /// O ajuste não serve pra este PC (build, RAM, disco, notebook). Diz o motivo.
+    #[error("Indisponível neste PC: {0}")]
+    Unavailable(String),
+
+    /// Ajuste de risco alto pedido sem confirmação explícita.
+    #[error("“{0}” tem risco alto e precisa de confirmação antes de aplicar.")]
+    ConfirmationRequired(String),
+
     #[error("Recurso disponível apenas no Windows.")]
     #[allow(dead_code)] // usado só fora do Windows (stubs)
     Unsupported,
@@ -40,6 +48,8 @@ impl AppError {
             AppError::CommandFailed { .. } => "commandFailed",
             AppError::ElevationDenied => "elevationDenied",
             AppError::Helper(_) => "helper",
+            AppError::Unavailable(_) => "unavailable",
+            AppError::ConfirmationRequired(_) => "confirmationRequired",
             AppError::Unsupported => "unsupported",
             AppError::Io(_) => "io",
         }

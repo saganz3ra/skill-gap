@@ -19,6 +19,7 @@ export function Ajustes() {
   const [restart, setRestart] = useState<Restart>("none");
   const [profileName, setProfileName] = useState("");
   const [revertReport, setRevertReport] = useState<BatchReport | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -33,12 +34,18 @@ export function Ajustes() {
   const revertable = tweaks?.filter((t) => t.canRevert).length ?? 0;
   const names = useMemo(() => new Map((tweaks ?? []).map((t) => [t.id, t.name])), [tweaks]);
 
-  async function toggle(t: TweakView, on: boolean) {
+  async function toggle(t: TweakView, on: boolean, confirmed = false) {
+    // Risco alto: pede confirmação no card antes (o backend também recusa sem ela).
+    if (on && t.risk === "high" && !confirmed) {
+      setConfirming(t.id);
+      return;
+    }
+    setConfirming(null);
     setBusy(t.id);
     setMessage(null);
     setRevertReport(null);
     try {
-      await (on ? api.tweakApply(t.id) : api.tweakRevert(t.id));
+      await (on ? api.tweakApply(t.id, confirmed) : api.tweakRevert(t.id));
       // Guarda a reinicialização mais pesada pendente.
       setRestart((r) => (order(t.restart) > order(r) ? t.restart : r));
       await reload();
@@ -165,6 +172,9 @@ export function Ajustes() {
             tweak={t}
             busy={busy === t.id || busy === "*"}
             onToggle={(on) => void toggle(t, on)}
+            confirming={confirming === t.id}
+            onConfirm={() => void toggle(t, true, true)}
+            onCancel={() => setConfirming(null)}
             onFavorite={() => void favorite(t)}
           />
         ))}
@@ -189,16 +199,24 @@ function TweakCard({
   busy,
   onToggle,
   onFavorite,
+  confirming,
+  onConfirm,
+  onCancel,
 }: {
   tweak: TweakView;
   busy: boolean;
   onToggle: (on: boolean) => void;
   onFavorite: () => void;
+  confirming: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const on = t.state === "active";
   // Ativo sem foto = já estava assim no Windows; não temos um "antes" pra voltar.
   const lockedOn = on && !t.canRevert;
+  // Indisponível bloqueia só o APLICAR: se já está aplicado, o desfazer continua livre.
+  const blocked = !on && t.gate.status === "unavailable";
   const restartLabel = RESTART_LABEL[t.restart];
   const stateBadge = STATE_BADGE[t.state];
   const detailsId = `det-${t.id}`;
@@ -222,11 +240,27 @@ function TweakCard({
       <div className="tweak-badges">
         <span className="badge badge-idle">{CATEGORY_LABEL[t.category]}</span>
         {t.impact === "small" && <span className="badge badge-warn">Efeito pequeno</span>}
+        {t.impact === "high" && <span className="badge badge-ok">Efeito alto</span>}
+        {t.risk === "medium" && <span className="badge badge-warn">Risco médio</span>}
+        {t.risk === "high" && <span className="badge badge-danger">Risco alto</span>}
+        {t.heats && <span className="badge badge-warn" title="Aumenta temperatura e consumo; fica fora dos perfis">Esquenta</span>}
+        {t.gate.status === "unavailable" && <span className="badge badge-idle">Indisponível neste PC</span>}
         {t.requiresAdmin && <span className="badge badge-idle" title="O Windows pede permissão de administrador na hora de aplicar">Pede permissão</span>}
         {restartLabel && <span className="badge badge-info">{restartLabel}</span>}
-        {t.laptopUnsafe && <span className="badge badge-idle">Evite em notebook</span>}
         {stateBadge && <span className={`badge ${stateBadge[0]}`}>{stateBadge[1]}</span>}
       </div>
+
+      {t.gate.status !== "ok" && (
+        <p className={`small ${t.gate.status === "warn" ? "warn-text" : "muted"}`} style={{ margin: 0 }}>
+          {t.gate.status === "warn" ? "Atenção: " : "Indisponível: "}
+          {t.gate.reason}.
+        </p>
+      )}
+      {t.breaks && (
+        <p className="small muted" style={{ margin: 0 }}>
+          <strong>Pode afetar:</strong> {t.breaks}
+        </p>
+      )}
 
       {open && (
         <p id={detailsId} className="tweak-details">
@@ -234,14 +268,28 @@ function TweakCard({
         </p>
       )}
 
+      {confirming && (
+        <div className="error-box" role="alertdialog" aria-label={`Confirmar ${t.name}`}>
+          <strong>Risco alto.</strong> {t.breaks} Dá pra desfazer depois, mas confirme que quer aplicar.
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+            <button type="button" className="btn btn-primary btn-sm" style={{ whiteSpace: "nowrap" }} onClick={onConfirm}>
+              Aplicar mesmo assim
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="tweak-foot">
         <button type="button" className="link-btn" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen((o) => !o)}>
           Detalhes <ChevronDown size={14} aria-hidden="true" style={{ transform: open ? "rotate(180deg)" : undefined }} />
         </button>
-        <span title={lockedOn ? "Já estava assim no seu Windows antes do Skill Gap" : undefined}>
+        <span title={lockedOn ? "Já estava assim no seu Windows antes do Skill Gap" : blocked ? "Não serve para este PC" : undefined}>
           <Switch
             checked={on}
-            disabled={busy || lockedOn || t.state === "unknown"}
+            disabled={busy || lockedOn || blocked || t.state === "unknown"}
             onChange={onToggle}
             label={`${on ? "Desfazer" : "Aplicar"} ${t.name}`}
           />

@@ -151,13 +151,15 @@ fn tweak_for(id: CheckId) -> Option<&'static str> {
 // ---------------- Plataforma ----------------
 
 #[cfg(windows)]
-use windows::{displays, set_refresh};
+pub(crate) use windows::displays;
+#[cfg(windows)]
+use windows::set_refresh;
 /// Reaproveitados pelo motor de ajustes (tweaks) e pelo monitor de jogos.
 #[cfg(windows)]
 pub(crate) use windows::{mouse_get, mouse_set, mouse_speed_get, mouse_speed_set, process_list};
 
 #[cfg(not(windows))]
-fn displays() -> Vec<Display> {
+pub(crate) fn displays() -> Vec<Display> {
     Vec::new()
 }
 #[cfg(not(windows))]
@@ -246,9 +248,10 @@ pub fn diagnose(state: &GamingState, engine: &TweakEngine) -> GamingReport {
 
 // ---------------- Corrigir / desfazer ----------------
 
-pub fn fix(state: &GamingState, engine: &TweakEngine, id: CheckId) -> AppResult<()> {
+pub fn fix(state: &GamingState, engine: &TweakEngine, sys: &crate::system::SystemProfile, id: CheckId) -> AppResult<()> {
     if let Some(tweak_id) = tweak_for(id) {
-        return engine.apply(tweak_id);
+        // Mesma porta do "Todos os ajustes": requisitos conferidos no backend.
+        return engine.apply_checked(tweak_id, sys, false);
     }
     match id {
         CheckId::RefreshRate => {
@@ -353,7 +356,7 @@ mod tests {
         assert_eq!(mouse.status, Status::Warn, "o FakeSys começa com aceleração ligada");
         assert!(mouse.fixable);
 
-        fix(&state, &e, CheckId::MouseAcceleration).unwrap();
+        fix(&state, &e, &crate::system::read_profile(), CheckId::MouseAcceleration).unwrap();
         let mouse = diagnose(&state, &e).checks.into_iter().find(|c| c.id == CheckId::MouseAcceleration).unwrap();
         assert_eq!(mouse.status, Status::Ok);
         assert!(mouse.can_revert, "o desfazer agora é do motor, salvo em disco");

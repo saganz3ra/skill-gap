@@ -5,11 +5,16 @@
 //!   NetworkThrottlingIndex) fica de fora de propósito.
 //! - Ajuste de efeito pequeno ou dependente do PC leva `Impact::Small` e uma explicação
 //!   honesta em `details`, e nunca entra nos perfis prontos.
+//! - Risco médio ou alto exige `breaks`: uma linha dizendo o que pode parar de funcionar.
+//! - Risco alto exige confirmação (conferida no backend) e nunca entra em perfil.
+//! - `heats` (mais calor/consumo) nunca entra em perfil: só aplicado um a um, com aviso.
+//! - Dois ajustes nunca escrevem no mesmo lugar: desfazer um apagaria o outro.
 
 use serde::Serialize;
 
 use super::ops::{Hive::*, Op};
 use crate::power::PowerPlan;
+use crate::system::{DiskKind, SystemProfile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,10 +30,124 @@ pub enum Category {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Impact {
-    Real,
     /// Efeito pequeno ou que depende do hardware: aparece com aviso, fora dos perfis.
     Small,
+    Medium,
+    High,
 }
+
+/// Chance de algo parar de funcionar. Independe do impacto.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Risk {
+    Low,
+    Medium,
+    /// Exige confirmação explícita, conferida no backend.
+    High,
+}
+
+/// Só faz sentido em desktop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DesktopOnly {
+    /// `true`: em notebook aparece com aviso (dá pra aplicar à mão; perfis pulam).
+    /// `false`: em notebook fica indisponível.
+    pub warn: bool,
+}
+
+/// Requisitos declarativos do ajuste.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Requires {
+    pub min_build: Option<u32>,
+    pub min_ram_gb: Option<u32>,
+    pub ssd: bool,
+    pub desktop_only: Option<DesktopOnly>,
+}
+
+/// Sem requisitos. Com requisito: `Requires { min_build: Some(22000), ..ANY }`.
+pub const ANY: Requires = Requires { min_build: None, min_ram_gb: None, ssd: false, desktop_only: None };
+
+/// Se o ajuste serve para ESTE PC.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", content = "reason", rename_all = "camelCase")]
+pub enum Gate {
+    Ok,
+    /// Dá pra aplicar à mão, com o aviso; perfis pulam.
+    Warn(String),
+    /// Some do "aplicar". NUNCA bloqueia o desfazer.
+    Unavailable(String),
+}
+
+/// Avalia os requisitos. Quando não deu pra ler algo (build 0, disco Unknown), o
+/// resultado é aviso, não bloqueio: na dúvida, quem decide é o usuário.
+pub fn gate(t: &Tweak, s: &SystemProfile) -> Gate {
+    let (mut block, mut warn) = (Vec::new(), Vec::new());
+    let r = t.requires;
+    if let Some(min) = r.min_build {
+        if s.build == 0 {
+            warn.push("não deu pra ler a versão do Windows".to_string());
+        } else if s.build < min {
+            block.push(if min >= 22000 { "exige Windows 11".to_string() } else { format!("exige Windows build {min} ou mais novo") });
+        }
+    }
+    if let Some(min) = r.min_ram_gb {
+        if s.ram_gb == 0 {
+            warn.push("não deu pra ler a RAM instalada".to_string());
+        } else if s.ram_gb < min {
+            block.push(format!("exige {min} GB de RAM ou mais (este PC tem {})", s.ram_gb));
+        }
+    }
+    if r.ssd {
+        match s.system_disk {
+            DiskKind::Ssd => {}
+            DiskKind::Hdd => block.push("o Windows está num HD mecânico: aqui atrapalha".to_string()),
+            DiskKind::Unknown => warn.push("não deu pra saber se o disco do sistema é SSD".to_string()),
+        }
+    }
+    if let (Some(d), true) = (r.desktop_only, s.is_laptop) {
+        let msg = "feito para desktop: em notebook esquenta e gasta bateria".to_string();
+        if d.warn {
+            warn.push(msg)
+        } else {
+            block.push(msg)
+        }
+    }
+    if !block.is_empty() {
+        Gate::Unavailable(block.join("; "))
+    } else if !warn.is_empty() {
+        Gate::Warn(warn.join("; "))
+    } else {
+        Gate::Ok
+    }
+}
+
+/// Validação de backend antes de aplicar um ajuste avulso. O front também mostra, mas
+/// não é ele quem garante.
+pub fn check_apply(t: &Tweak, s: &SystemProfile, confirmed: bool) -> crate::error::AppResult<()> {
+    if let Gate::Unavailable(reason) = gate(t, s) {
+        return Err(crate::error::AppError::Unavailable(reason));
+    }
+    if t.risk == Risk::High && !confirmed {
+        return Err(crate::error::AppError::ConfirmationRequired(t.name.to_string()));
+    }
+    Ok(())
+}
+
+/// Por que um perfil (aplicar em um clique) pula este ajuste, se pula.
+pub fn profile_skip_reason(t: &Tweak, s: &SystemProfile) -> Option<String> {
+    match gate(t, s) {
+        Gate::Unavailable(r) => return Some(r),
+        Gate::Warn(r) => return Some(format!("{r} (aplique à mão se quiser)")),
+        Gate::Ok => {}
+    }
+    if t.heats {
+        return Some("aumenta calor e consumo: só aplicado um a um".into());
+    }
+    if t.risk == Risk::High {
+        return Some("risco alto: precisa de confirmação, aplique à mão".into());
+    }
+    None
+}
+
 
 /// O que é preciso pra mudança valer. Ordenado do mais leve pro mais pesado.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -49,9 +168,13 @@ pub struct Tweak {
     pub details: &'static str,
     pub category: Category,
     pub impact: Impact,
+    pub risk: Risk,
+    /// O que pode parar de funcionar (obrigatório com risco médio ou alto).
+    pub breaks: Option<&'static str>,
+    /// Pode aumentar temperatura e consumo: aviso + fora dos perfis.
+    pub heats: bool,
+    pub requires: Requires,
     pub restart: Restart,
-    /// Em notebook só esquenta e gasta bateria: perfis pulam em notebook.
-    pub laptop_unsafe: bool,
     pub ops: &'static [Op],
 }
 
@@ -79,9 +202,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Prioriza o jogo e segura o Windows Update durante a partida.",
         details: "Recurso nativo do Windows 10/11. Vem ligado por padrão; este ajuste só garante que ninguém desligou.",
         category: Category::Gaming,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::None,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::Dword { hive: Hkcu, path: r"Software\Microsoft\GameBar", name: "AutoGameModeEnabled", value: 1 }],
     },
     Tweak {
@@ -90,9 +216,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Para a gravação de clipes da Xbox Game Bar, inclusive em segundo plano.",
         details: "A gravação em segundo plano usa o codificador de vídeo da GPU o tempo todo. Se você grava clipes pela Game Bar, deixe desligado este ajuste.",
         category: Category::Gaming,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::None,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[
             Op::Dword { hive: Hkcu, path: r"System\GameConfigStore", name: "GameDVR_Enabled", value: 0 },
             Op::Dword { hive: Hkcu, path: r"Software\Microsoft\Windows\CurrentVersion\GameDVR", name: "AppCaptureEnabled", value: 0 },
@@ -104,9 +233,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "A própria GPU organiza a fila de quadros.",
         details: "Obrigatório pro DLSS Frame Generation. O ganho de latência varia por jogo e driver; em GPUs antigas pode não aparecer a opção. Precisa reiniciar.",
         category: Category::Gaming,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::Reboot,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::Dword { hive: Hklm, path: r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", name: "HwSchMode", value: 2 }],
     },
     Tweak {
@@ -115,9 +247,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Movimento 1:1: a mesma distância física sempre move o cursor o mesmo tanto.",
         details: "Desliga o “Aumentar precisão do ponteiro”. Essencial pra memória muscular de mira; a maioria dos jogos competitivos já usa raw input, mas menus e jogos sem raw input passam a se comportar igual.",
         category: Category::Gaming,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::None,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::MouseAccelerationOff],
     },
     Tweak {
@@ -126,9 +261,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Cada contagem do sensor move exatamente 1 pixel.",
         details: "É a 6ª marca (de 11) do controle de velocidade do Windows. Acima disso o Windows pula pixels; abaixo, descarta movimento. Ajuste a sensibilidade pelo DPI do mouse e pelo jogo, não por aqui.",
         category: Category::Gaming,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::None,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::MouseSpeed(10)],
     },
     Tweak {
@@ -137,9 +275,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Apertar Shift 5 vezes não abre mais a janela que tira você do jogo.",
         details: "Só desliga o atalho de teclado; o recurso de acessibilidade continua disponível nas Configurações. Vale após sair e entrar na conta.",
         category: Category::Gaming,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::Logoff,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::Str { hive: Hkcu, path: r"Control Panel\Accessibility\StickyKeys", name: "Flags", value: "506" }],
     },
     // ---------------- Desempenho ----------------
@@ -147,11 +288,14 @@ pub static TWEAKS: &[Tweak] = &[
         id: "power_high",
         name: "Plano de energia Alto desempenho",
         description: "A CPU não entra nos estados mais profundos de economia.",
-        details: "Responde mais rápido a picos de carga, com mais consumo e calor. Em notebook os perfis pulam este ajuste.",
+        details: "Responde mais rápido a picos de carga, com mais consumo e calor. Por isso não entra nos perfis: aplique à mão se quiser.",
         category: Category::Desempenho,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::None,
-        laptop_unsafe: true,
+        risk: Risk::Low,
+        breaks: None,
+        heats: true,
+        requires: Requires { desktop_only: Some(DesktopOnly { warn: true }), ..ANY },
         ops: &[Op::PowerPlan(PowerPlan::HighPerformance)],
     },
     Tweak {
@@ -162,7 +306,10 @@ pub static TWEAKS: &[Tweak] = &[
         category: Category::Desempenho,
         impact: Impact::Small,
         restart: Restart::None,
-        laptop_unsafe: false,
+        risk: Risk::Medium,
+        breaks: Some("Em HD mecânico, programas e o próprio Windows passam a abrir mais devagar."),
+        heats: false,
+        requires: ANY,
         ops: &[Op::Service { name: "SysMain", start: 4 }],
     },
     Tweak {
@@ -173,7 +320,10 @@ pub static TWEAKS: &[Tweak] = &[
         category: Category::Desempenho,
         impact: Impact::Small,
         restart: Restart::Reboot,
-        laptop_unsafe: false,
+        risk: Risk::Medium,
+        breaks: Some("Com pouca RAM o Windows usa mais o arquivo de paginação e pode ficar mais lento."),
+        heats: false,
+        requires: ANY,
         ops: &[Op::MemoryCompressionOff],
     },
     Tweak {
@@ -184,7 +334,10 @@ pub static TWEAKS: &[Tweak] = &[
         category: Category::Desempenho,
         impact: Impact::Small,
         restart: Restart::Reboot,
-        laptop_unsafe: true,
+        risk: Risk::Low,
+        breaks: None,
+        heats: true,
+        requires: Requires { desktop_only: Some(DesktopOnly { warn: true }), ..ANY },
         ops: &[Op::Dword {
             hive: Hklm,
             path: r"SYSTEM\CurrentControlSet\Control\Session Manager\kernel",
@@ -199,9 +352,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Barra de tarefas e menus sem o efeito acrílico.",
         details: "Alivia um pouco a GPU integrada e PCs mais fracos. Visualmente, os menus ficam opacos.",
         category: Category::Aparencia,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::None,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::Dword {
             hive: Hkcu,
             path: r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
@@ -215,9 +371,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Minimizar, maximizar e a barra de tarefas sem animação.",
         details: "Deixa a interface com resposta instantânea. Vale após sair e entrar na conta.",
         category: Category::Aparencia,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::Logoff,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[
             Op::Str { hive: Hkcu, path: r"Control Panel\Desktop\WindowMetrics", name: "MinAnimate", value: "0" },
             Op::Dword { hive: Hkcu, path: ADVANCED, name: "TaskbarAnimations", value: 0 },
@@ -229,9 +388,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Ícones alinhados à esquerda, como no Windows 10.",
         details: "Só Windows 11.",
         category: Category::Aparencia,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::Explorer,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::Dword { hive: Hkcu, path: ADVANCED, name: "TaskbarAl", value: 0 }],
     },
     Tweak {
@@ -240,9 +402,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Clique direito abre o menu completo, sem “Mostrar mais opções”.",
         details: "Só Windows 11. Funciona registrando uma entrada vazia que faz o Explorer usar o menu antigo; desfazer apaga a entrada.",
         category: Category::Aparencia,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::Explorer,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::KeyWithEmptyDefault { hive: Hkcu, path: CLASSIC_MENU_KEY, root: CLASSIC_MENU_ROOT }],
     },
     // ---------------- Geral ----------------
@@ -252,9 +417,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Exibe “.exe”, “.pdf” etc. no nome dos arquivos.",
         details: "Também é segurança: fica fácil perceber um “foto.jpg.exe”.",
         category: Category::Geral,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::Explorer,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::Dword { hive: Hkcu, path: ADVANCED, name: "HideFileExt", value: 0 }],
     },
     // ---------------- Privacidade ----------------
@@ -264,9 +432,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Sem apps instalados sozinhos, sugestões no Iniciar e dicas do Windows.",
         details: "Desliga o “Gerenciador de Entrega de Conteúdo”, responsável por instalar apps patrocinados e mostrar sugestões.",
         category: Category::Privacidade,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::None,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[
             Op::Dword { hive: Hkcu, path: CDM, name: "SilentInstalledAppsEnabled", value: 0 },
             Op::Dword { hive: Hkcu, path: CDM, name: "SystemPaneSuggestionsEnabled", value: 0 },
@@ -280,9 +451,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Apps não recebem mais um identificador pra anúncios personalizados.",
         details: "Mesma opção de Configurações › Privacidade › Geral.",
         category: Category::Privacidade,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::None,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::Dword { hive: Hkcu, path: r"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", name: "Enabled", value: 0 }],
     },
     Tweak {
@@ -291,9 +465,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Reduz os dados de diagnóstico enviados à Microsoft.",
         details: "No Windows Home/Pro o mínimo aceito é “Obrigatório”: o valor 0 só desliga de vez no Enterprise/Education. Ainda assim tira os dados opcionais.",
         category: Category::Privacidade,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::None,
-        laptop_unsafe: false,
+        risk: Risk::Medium,
+        breaks: Some("Alguns diagnósticos do Windows e recursos de compatibilidade da Store deixam de funcionar."),
+        heats: false,
+        requires: ANY,
         ops: &[Op::Dword { hive: Hklm, path: r"SOFTWARE\Policies\Microsoft\Windows\DataCollection", name: "AllowTelemetry", value: 0 }],
     },
     Tweak {
@@ -302,9 +479,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "A busca do Iniciar procura só no PC, sem resultados da web.",
         details: "Mais rápido e sem enviar o que você digita. Vale após reiniciar o Explorer.",
         category: Category::Privacidade,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::Explorer,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::Dword { hive: Hkcu, path: r"Software\Policies\Microsoft\Windows\Explorer", name: "DisableSearchBoxSuggestions", value: 1 }],
     },
     Tweak {
@@ -313,9 +493,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "Impede que o Windows tire capturas da tela pra busca com IA.",
         details: "O Recall só existe em PCs Copilot+. Em outros PCs este ajuste não muda nada, mas também não atrapalha.",
         category: Category::Privacidade,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::None,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::Dword { hive: Hkcu, path: r"Software\Policies\Microsoft\Windows\WindowsAI", name: "DisableAIDataAnalysis", value: 1 }],
     },
     // ---------------- Rede ----------------
@@ -325,9 +508,12 @@ pub static TWEAKS: &[Tweak] = &[
         description: "O Windows para de enviar atualizações pra outros PCs usando seu upload.",
         details: "Desliga o modo P2P da Otimização de Entrega. As atualizações continuam vindo direto da Microsoft. Ajuda quando o upload é limitado e você joga ou faz live.",
         category: Category::Rede,
-        impact: Impact::Real,
+        impact: Impact::Medium,
         restart: Restart::None,
-        laptop_unsafe: false,
+        risk: Risk::Low,
+        breaks: None,
+        heats: false,
+        requires: ANY,
         ops: &[Op::Dword { hive: Hklm, path: r"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", name: "DODownloadMode", value: 0 }],
     },
 ];
@@ -348,10 +534,10 @@ pub static PROFILES: &[BuiltinProfile] = &[
     BuiltinProfile {
         id: "competitivo",
         name: "Competitivo",
-        description: "Menor latência possível no desktop: energia no máximo, nada gravando, mouse 1:1.",
+        description: "Menor latência possível no desktop: nada gravando em segundo plano, mouse 1:1.",
         tweaks: &[
-            "game_mode", "game_dvr_off", "hags", "mouse_accel_off", "sticky_keys_off", "power_high",
-            "transparency_off", "suggestions_off", "delivery_opt_off",
+            "game_mode", "game_dvr_off", "hags", "mouse_accel_off", "sticky_keys_off", "transparency_off",
+            "suggestions_off", "delivery_opt_off",
         ],
     },
     BuiltinProfile {
@@ -371,15 +557,15 @@ pub static PROFILES: &[BuiltinProfile] = &[
         name: "PC Modesto",
         description: "Pouca RAM, GPU integrada ou HD: tira o peso visual da interface.",
         tweaks: &[
-            "game_mode", "game_dvr_off", "mouse_accel_off", "power_high", "transparency_off", "animations_off",
-            "suggestions_off", "delivery_opt_off",
+            "game_mode", "game_dvr_off", "mouse_accel_off", "transparency_off", "animations_off", "suggestions_off",
+            "delivery_opt_off",
         ],
     },
     BuiltinProfile {
         id: "streamer",
         name: "Streamer",
-        description: "Jogo e transmissão juntos: GPU organizando a fila e energia no máximo.",
-        tweaks: &["game_mode", "hags", "mouse_accel_off", "sticky_keys_off", "power_high", "suggestions_off"],
+        description: "Jogo e transmissão juntos: GPU organizando a fila de quadros.",
+        tweaks: &["game_mode", "hags", "mouse_accel_off", "sticky_keys_off", "suggestions_off"],
     },
     BuiltinProfile {
         id: "privacidade",
@@ -412,7 +598,9 @@ mod tests {
         for p in PROFILES {
             for id in p.tweaks {
                 let t = find(id).unwrap_or_else(|| panic!("perfil {} usa ajuste inexistente {id}", p.id));
-                assert_eq!(t.impact, Impact::Real, "perfil {} inclui ajuste de efeito pequeno {id}", p.id);
+                assert_ne!(t.impact, Impact::Small, "perfil {} inclui ajuste de efeito pequeno {id}", p.id);
+                assert!(!t.heats, "perfil {} inclui ajuste que esquenta {id}", p.id);
+                assert_ne!(t.risk, Risk::High, "perfil {} inclui ajuste de risco alto {id}", p.id);
             }
         }
     }
@@ -420,7 +608,113 @@ mod tests {
     #[test]
     fn perfil_notebook_nao_tem_nada_que_esquente() {
         let p = find_profile("notebook").unwrap();
-        assert!(p.tweaks.iter().all(|id| !find(id).unwrap().laptop_unsafe));
+        assert!(p.tweaks.iter().all(|id| find(id).unwrap().requires.desktop_only.is_none()));
+    }
+
+    #[test]
+    fn risco_medio_ou_alto_diz_o_que_quebra() {
+        for t in TWEAKS {
+            if t.risk >= Risk::Medium {
+                assert!(t.breaks.is_some_and(|b| !b.trim().is_empty()), "{} tem risco {:?} sem `breaks`", t.id, t.risk);
+            }
+        }
+    }
+
+    /// Onde cada operação escreve. Dois ajustes no mesmo destino quebram o desfazer:
+    /// reverter um restaura a foto e desliga o outro sem avisar. Por isso a regra é
+    /// "nenhum destino repetido", mesmo com o MESMO valor.
+    fn target(op: &Op) -> String {
+        match *op {
+            Op::Dword { hive, path, name, .. } | Op::Str { hive, path, name, .. } => {
+                format!("reg:{hive:?}:{}:{}", path.to_ascii_lowercase(), name.to_ascii_lowercase())
+            }
+            Op::KeyWithEmptyDefault { hive, path, .. } => format!("key:{hive:?}:{}", path.to_ascii_lowercase()),
+            Op::Service { name, .. } => format!("service:{}", name.to_ascii_lowercase()),
+            Op::PowerPlan(_) => "power:active_plan".into(),
+            Op::MouseAccelerationOff => "spi:mouse_accel".into(),
+            Op::MouseSpeed(_) => "spi:mouse_speed".into(),
+            Op::MemoryCompressionOff => "mmagent:compression".into(),
+        }
+    }
+
+    #[test]
+    fn nenhum_destino_escrito_por_dois_ajustes() {
+        let mut owner = std::collections::HashMap::new();
+        for t in TWEAKS {
+            for op in t.ops {
+                if let Some(other) = owner.insert(target(op), t.id) {
+                    assert_eq!(other, t.id, "{} e {} escrevem em {}", other, t.id, target(op));
+                }
+            }
+        }
+    }
+
+    fn pc(build: u32, ram: u32, disk: DiskKind, laptop: bool) -> SystemProfile {
+        SystemProfile { windows: String::new(), build, is_laptop: laptop, ram_gb: ram, system_disk: disk }
+    }
+
+    const fn sample(risk: Risk, heats: bool, requires: Requires) -> Tweak {
+        Tweak {
+            id: "x",
+            name: "Teste",
+            description: "",
+            details: "",
+            category: Category::Geral,
+            impact: Impact::Medium,
+            risk,
+            breaks: Some("algo"),
+            heats,
+            requires,
+            restart: Restart::None,
+            ops: &[],
+        }
+    }
+
+    #[test]
+    fn gate_por_requisito() {
+        let desktop = pc(26100, 32, DiskKind::Ssd, false);
+        let win11 = sample(Risk::Low, false, Requires { min_build: Some(22000), ..ANY });
+        assert_eq!(gate(&win11, &desktop), Gate::Ok);
+        assert!(matches!(gate(&win11, &pc(19045, 32, DiskKind::Ssd, false)), Gate::Unavailable(r) if r.contains("Windows 11")));
+        assert!(matches!(gate(&win11, &pc(0, 32, DiskKind::Ssd, false)), Gate::Warn(_)), "não leu: avisa, não bloqueia");
+
+        let ram16 = sample(Risk::Low, false, Requires { min_ram_gb: Some(16), ..ANY });
+        assert!(matches!(gate(&ram16, &pc(26100, 8, DiskKind::Ssd, false)), Gate::Unavailable(r) if r.contains("tem 8")));
+
+        let ssd = sample(Risk::Low, false, Requires { ssd: true, ..ANY });
+        assert!(matches!(gate(&ssd, &pc(26100, 32, DiskKind::Hdd, false)), Gate::Unavailable(_)));
+        assert!(matches!(gate(&ssd, &pc(26100, 32, DiskKind::Unknown, false)), Gate::Warn(_)));
+
+        let warn = sample(Risk::Low, false, Requires { desktop_only: Some(DesktopOnly { warn: true }), ..ANY });
+        let block = sample(Risk::Low, false, Requires { desktop_only: Some(DesktopOnly { warn: false }), ..ANY });
+        let laptop = pc(26100, 16, DiskKind::Ssd, true);
+        assert!(matches!(gate(&warn, &laptop), Gate::Warn(_)));
+        assert!(matches!(gate(&block, &laptop), Gate::Unavailable(_)));
+        assert_eq!(gate(&block, &desktop), Gate::Ok);
+    }
+
+    #[test]
+    fn risco_alto_exige_confirmacao_no_backend() {
+        let desktop = pc(26100, 32, DiskKind::Ssd, false);
+        let high = sample(Risk::High, false, ANY);
+        assert!(matches!(check_apply(&high, &desktop, false), Err(crate::error::AppError::ConfirmationRequired(_))));
+        assert!(check_apply(&high, &desktop, true).is_ok());
+        let only_desktop = sample(Risk::Low, false, Requires { desktop_only: Some(DesktopOnly { warn: false }), ..ANY });
+        let laptop = pc(26100, 16, DiskKind::Ssd, true);
+        assert!(
+            matches!(check_apply(&only_desktop, &laptop, true), Err(crate::error::AppError::Unavailable(_))),
+            "confirmar não fura o requisito"
+        );
+    }
+
+    #[test]
+    fn perfil_pula_com_motivo() {
+        let desktop = pc(26100, 32, DiskKind::Ssd, false);
+        assert!(profile_skip_reason(&sample(Risk::Low, true, ANY), &desktop).unwrap().contains("calor"));
+        assert!(profile_skip_reason(&sample(Risk::High, false, ANY), &desktop).unwrap().contains("risco alto"));
+        assert_eq!(profile_skip_reason(&sample(Risk::Medium, false, ANY), &desktop), None);
+        let warn = sample(Risk::Low, false, Requires { desktop_only: Some(DesktopOnly { warn: true }), ..ANY });
+        assert!(profile_skip_reason(&warn, &pc(26100, 16, DiskKind::Ssd, true)).is_some(), "com aviso: perfil pula");
     }
 
     #[test]

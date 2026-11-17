@@ -4,12 +4,12 @@ use std::process::Command;
 
 use windows_sys::Win32::Globalization::{MultiByteToWideChar, CP_OEMCP};
 use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
-use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+use windows_sys::Win32::System::SystemInformation::{GetPhysicallyInstalledSystemMemory, GlobalMemoryStatusEx, MEMORYSTATUSEX};
 use windows_sys::Win32::UI::Shell::IsUserAnAdmin;
 use winreg::enums::HKEY_LOCAL_MACHINE;
 use winreg::RegKey;
 
-use super::{decode_console, parse_media_type, recommend, SystemInfo};
+use super::{decode_console, parse_media_type, SystemProfile};
 use crate::error::{AppError, AppResult};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -56,7 +56,7 @@ pub fn is_admin() -> bool {
     unsafe { IsUserAnAdmin() != 0 }
 }
 
-pub fn is_laptop() -> bool {
+fn is_laptop() -> bool {
     // SAFETY: struct POD zerada, preenchida pela API.
     let mut status: SYSTEM_POWER_STATUS = unsafe { zeroed() };
     if unsafe { GetSystemPowerStatus(&mut status) } == 0 {
@@ -66,13 +66,18 @@ pub fn is_laptop() -> bool {
     !matches!(status.BatteryFlag, 128 | 255)
 }
 
+/// RAM INSTALADA (32 GB), não a visível ao Windows (31,9 GB, parte fica reservada
+/// pro hardware). Se a API falhar (BIOS sem a tabela SMBIOS), usa a visível arredondada.
 fn ram_gb() -> u32 {
+    let mut kb: u64 = 0;
+    if unsafe { GetPhysicallyInstalledSystemMemory(&mut kb) } != 0 && kb > 0 {
+        return (kb / (1024 * 1024)) as u32;
+    }
     let mut mem: MEMORYSTATUSEX = unsafe { zeroed() };
     mem.dwLength = size_of::<MEMORYSTATUSEX>() as u32;
     if unsafe { GlobalMemoryStatusEx(&mut mem) } == 0 {
         return 0;
     }
-    // O Windows reserva um pouco pra hardware: 31,9 GB visíveis = 32 GB instalados.
     ((mem.ullTotalPhys as f64) / 1024f64.powi(3)).round() as u32
 }
 
@@ -92,22 +97,9 @@ fn system_disk() -> super::DiskKind {
     powershell(script).map(|s| parse_media_type(&s)).unwrap_or(super::DiskKind::Unknown)
 }
 
-pub fn info() -> SystemInfo {
+pub fn read_profile() -> SystemProfile {
     let (windows, build) = windows_version();
-    let is_laptop = is_laptop();
-    let ram_gb = ram_gb();
-    let system_disk = system_disk();
-    let (recommended_profile, reason) = recommend(is_laptop, ram_gb, system_disk);
-    SystemInfo {
-        windows,
-        build,
-        is_laptop,
-        ram_gb,
-        system_disk,
-        is_admin: is_admin(),
-        recommended_profile,
-        reason,
-    }
+    SystemProfile { windows, build, is_laptop: is_laptop(), ram_gb: ram_gb(), system_disk: system_disk() }
 }
 
 
