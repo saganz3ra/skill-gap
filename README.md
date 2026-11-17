@@ -138,7 +138,7 @@ Conferidas por testes em `tweaks/catalog.rs`:
 
 O GitHub gera o instalador sozinho (`.github/workflows/release.yml`):
 
-1. Suba a versão em `src-tauri/tauri.conf.json` e `package.json` (ex.: `0.2.0`) e faça commit.
+1. Suba a versão em `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` e `package.json` (um teste confere que as três batem) e preencha a `date` da primeira entrada do `CHANGELOG.json` (o workflow recusa a tag sem ela). Faça commit.
 2. `git tag v0.2.0 && git push origin v0.2.0`
 3. Em ~10 min aparece uma **Release em rascunho** com o `Skill Gap_0.2.0_x64-setup.exe`. Revise e clique em *Publish*.
 

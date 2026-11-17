@@ -137,6 +137,35 @@ export interface TweakView {
   favorite: boolean;
 }
 
+export type NewsKind = "novo" | "melhoria" | "correcao" | "mudanca";
+
+export interface Release {
+  version: string;
+  /** `null`: versão em desenvolvimento. */
+  date: string | null;
+  items: { kind: NewsKind; text: string }[];
+}
+
+export interface WhatsNew {
+  current: string;
+  lastSeen: string;
+  /** Versões depois da última que você abriu. */
+  unseen: Release[];
+  all: Release[];
+  /** Ajustes que entraram depois da última versão que você abriu. */
+  newTweaks: string[];
+}
+
+export const NEWS_KIND: Record<NewsKind, [string, string]> = {
+  novo: ["Novo", "badge-ok"],
+  melhoria: ["Melhoria", "badge-info"],
+  correcao: ["Correção", "badge-warn"],
+  mudanca: ["Mudança", "badge-idle"],
+};
+
+/** Disparado quando as novidades são marcadas como vistas (a barra lateral escuta). */
+export const NEWS_SEEN_EVENT = "skillgap:news-seen";
+
 export type Gate = { status: "ok" } | { status: "warn"; reason: string } | { status: "unavailable"; reason: string };
 
 /** Mesma regra do backend (`profile_skip_reason`): o que um perfil pula. */
@@ -390,6 +419,8 @@ export const api = {
   /** `ask`: pode abrir o UAC. Sem ele, só lê se já houver permissão nesta sessão. */
   bootReport: (ask = false) => invoke<BootReport>("boot_report", { ask }),
   elevationStatus: () => invoke<ElevationStatus>("elevation_status"),
+  whatsNew: () => invoke<WhatsNew>("whats_new"),
+  whatsNewSeen: () => invoke<void>("whats_new_seen"),
   bloatList: () => invoke<BloatApp[]>("bloat_list"),
   bloatRemove: (name: string) => invoke<void>("bloat_remove", { name }),
   onCleanupProgress: (cb: (r: CategoryResult) => void): Promise<UnlistenFn> =>

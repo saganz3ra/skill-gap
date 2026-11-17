@@ -174,6 +174,8 @@ pub struct Tweak {
     /// Pode aumentar temperatura e consumo: aviso + fora dos perfis.
     pub heats: bool,
     pub requires: Requires,
+    /// Versão do app em que o ajuste entrou (selo "novo"; tem que estar no CHANGELOG.json).
+    pub since: &'static str,
     pub restart: Restart,
     pub ops: &'static [Op],
 }
@@ -208,6 +210,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Dword { hive: Hkcu, path: r"Software\Microsoft\GameBar", name: "AutoGameModeEnabled", value: 1 }],
     },
     Tweak {
@@ -222,6 +225,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[
             Op::Dword { hive: Hkcu, path: r"System\GameConfigStore", name: "GameDVR_Enabled", value: 0 },
             Op::Dword { hive: Hkcu, path: r"Software\Microsoft\Windows\CurrentVersion\GameDVR", name: "AppCaptureEnabled", value: 0 },
@@ -239,6 +243,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Dword { hive: Hklm, path: r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", name: "HwSchMode", value: 2 }],
     },
     Tweak {
@@ -253,6 +258,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::MouseAccelerationOff],
     },
     Tweak {
@@ -267,6 +273,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::MouseSpeed(10)],
     },
     Tweak {
@@ -281,6 +288,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Str { hive: Hkcu, path: r"Control Panel\Accessibility\StickyKeys", name: "Flags", value: "506" }],
     },
     // ---------------- Desempenho ----------------
@@ -296,6 +304,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: true,
         requires: Requires { desktop_only: Some(DesktopOnly { warn: true }), ..ANY },
+        since: "0.1.0",
         ops: &[Op::PowerPlan(PowerPlan::HighPerformance)],
     },
     Tweak {
@@ -310,6 +319,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: Some("Em HD mecânico, programas e o próprio Windows passam a abrir mais devagar."),
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Service { name: "SysMain", start: 4 }],
     },
     Tweak {
@@ -324,6 +334,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: Some("Com pouca RAM o Windows usa mais o arquivo de paginação e pode ficar mais lento."),
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::MemoryCompressionOff],
     },
     Tweak {
@@ -338,6 +349,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: true,
         requires: Requires { desktop_only: Some(DesktopOnly { warn: true }), ..ANY },
+        since: "0.1.0",
         ops: &[Op::Dword {
             hive: Hklm,
             path: r"SYSTEM\CurrentControlSet\Control\Session Manager\kernel",
@@ -358,6 +370,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Dword {
             hive: Hkcu,
             path: r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
@@ -377,6 +390,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[
             Op::Str { hive: Hkcu, path: r"Control Panel\Desktop\WindowMetrics", name: "MinAnimate", value: "0" },
             Op::Dword { hive: Hkcu, path: ADVANCED, name: "TaskbarAnimations", value: 0 },
@@ -394,6 +408,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Dword { hive: Hkcu, path: ADVANCED, name: "TaskbarAl", value: 0 }],
     },
     Tweak {
@@ -408,6 +423,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::KeyWithEmptyDefault { hive: Hkcu, path: CLASSIC_MENU_KEY, root: CLASSIC_MENU_ROOT }],
     },
     // ---------------- Geral ----------------
@@ -423,6 +439,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Dword { hive: Hkcu, path: ADVANCED, name: "HideFileExt", value: 0 }],
     },
     // ---------------- Privacidade ----------------
@@ -438,6 +455,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[
             Op::Dword { hive: Hkcu, path: CDM, name: "SilentInstalledAppsEnabled", value: 0 },
             Op::Dword { hive: Hkcu, path: CDM, name: "SystemPaneSuggestionsEnabled", value: 0 },
@@ -457,6 +475,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Dword { hive: Hkcu, path: r"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", name: "Enabled", value: 0 }],
     },
     Tweak {
@@ -471,6 +490,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: Some("Alguns diagnósticos do Windows e recursos de compatibilidade da Store deixam de funcionar."),
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Dword { hive: Hklm, path: r"SOFTWARE\Policies\Microsoft\Windows\DataCollection", name: "AllowTelemetry", value: 0 }],
     },
     Tweak {
@@ -485,6 +505,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Dword { hive: Hkcu, path: r"Software\Policies\Microsoft\Windows\Explorer", name: "DisableSearchBoxSuggestions", value: 1 }],
     },
     Tweak {
@@ -499,6 +520,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Dword { hive: Hkcu, path: r"Software\Policies\Microsoft\Windows\WindowsAI", name: "DisableAIDataAnalysis", value: 1 }],
     },
     // ---------------- Rede ----------------
@@ -514,6 +536,7 @@ pub static TWEAKS: &[Tweak] = &[
         breaks: None,
         heats: false,
         requires: ANY,
+        since: "0.1.0",
         ops: &[Op::Dword { hive: Hklm, path: r"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", name: "DODownloadMode", value: 0 }],
     },
 ];
@@ -665,6 +688,7 @@ mod tests {
             breaks: Some("algo"),
             heats,
             requires,
+            since: "0.1.0",
             restart: Restart::None,
             ops: &[],
         }
