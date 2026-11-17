@@ -110,21 +110,6 @@ pub fn info() -> SystemInfo {
     }
 }
 
-/// Cria um ponto de restauração. Falha se a Proteção do Sistema estiver desligada no C:
-/// ou sem admin. O Windows também ignora pedidos repetidos em menos de 24 h.
-pub fn create_restore_point() -> AppResult<()> {
-    powershell("Checkpoint-Computer -Description 'Skill Gap' -RestorePointType 'MODIFY_SETTINGS' -ErrorAction Stop")
-        .map(|_| ())
-        .map_err(|e| match e {
-            AppError::CommandFailed { detail, .. } => AppError::CommandFailed {
-                command: "Ponto de restauração".into(),
-                detail: format!(
-                    "{detail}\nVerifique se a Proteção do Sistema está ativada no disco C: (Painel de Controle › Sistema › Proteção do Sistema)."
-                ),
-            },
-            other => other,
-        })
-}
 
 /// Reinicia o Explorer pra aplicar ajustes de barra de tarefas e menus sem sair da conta.
 pub fn restart_explorer() -> AppResult<()> {

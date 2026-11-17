@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { api, CLEANUP_INFO, PLAN_INFO, type BatchReport } from "../lib/api";
+import { api, CLEANUP_INFO, PLAN_INFO, type BatchReport, type RestoreOutcome } from "../lib/api";
 import { formatBytes } from "../lib/format";
 import { useResource } from "../hooks/useResource";
 import { PageHeader } from "../components/ui";
-import { BatchSummary, friendlyError } from "../components/feedback";
+import { BatchSummary, friendlyError, RestoreNotice } from "../components/feedback";
 
 export function Inicio() {
   const startup = useResource(api.listStartupItems);
@@ -18,6 +18,7 @@ export function Inicio() {
   const [restorePoint, setRestorePoint] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"optimize" | "restore" | "undo" | null>(null);
   const [report, setReport] = useState<{ verb: string; report: BatchReport } | null>(null);
+  const [restore, setRestore] = useState<RestoreOutcome | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const names = useMemo(() => new Map((tweaks.data ?? []).map((t) => [t.id, t.name])), [tweaks.data]);
@@ -45,14 +46,16 @@ export function Inicio() {
     setBusy(kind);
     setMessage(null);
     setReport(null);
+    setRestore(null);
     try {
       if (kind === "optimize" && recommended) {
-        setReport({ verb: `aplicados pelo perfil ${recommended.name}`, report: await api.profileApply(recommended.id, wantsRestore) });
+        const r = await api.profileApply(recommended.id, wantsRestore);
+        setRestore(r.restorePoint);
+        if (r.report) setReport({ verb: `aplicados pelo perfil ${recommended.name}`, report: r.report });
       } else if (kind === "undo") {
         setReport({ verb: "desfeitos", report: await api.tweaksRevertAll() });
       } else if (kind === "restore") {
-        await api.createRestorePoint();
-        setMessage("Ponto de restauração criado. Se o Windows já tinha criado um nas últimas 24 h, ele reaproveita aquele.");
+        setRestore(await api.createRestorePoint());
       }
       await Promise.all([tweaks.reload(), power.reload()]);
     } catch (e) {
@@ -186,6 +189,7 @@ export function Inicio() {
           {message}
         </div>
       )}
+      {restore && <RestoreNotice outcome={restore} applied={report !== null} />}
       {report && <BatchSummary report={report.report} names={names} verb={report.verb} />}
     </>
   );

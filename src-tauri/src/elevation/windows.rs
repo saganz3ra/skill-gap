@@ -212,7 +212,7 @@ fn execute(req: Request, mut progress: impl FnMut(serde_json::Value)) -> AppResu
         Request::StartService { name } => unit(WinSys.resume_service(&name)),
         Request::SetStartupApproved { id, enabled } => unit(crate::startup::set_enabled(&id, enabled)),
         Request::MemoryCompression { enabled } => unit(WinSys.set_memory_compression(enabled)),
-        Request::RestorePoint => unit(crate::system::create_restore_point()),
+        Request::RestorePoint => Ok(serde_json::to_value(crate::restore::create()?).unwrap_or_default()),
         Request::DriversBackup => Ok(serde_json::to_value(crate::drivers::backup()?).unwrap_or_default()),
         Request::BootReport => Ok(serde_json::to_value(crate::bootperf::report()?).unwrap_or_default()),
         Request::RunFix { id } => {

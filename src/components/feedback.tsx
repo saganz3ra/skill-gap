@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, errorMessage, isAppError, type BatchReport, type Restart } from "../lib/api";
+import { api, errorMessage, isAppError, type BatchReport, type Restart, type RestoreOutcome } from "../lib/api";
 
 /** Mensagem de erro amigável, com o caso de admin explicado. */
 export function friendlyError(e: unknown): string {
@@ -87,5 +87,38 @@ export function BatchSummary({ report, names, verb }: { report: BatchReport; nam
       )}
       <RestartNotice restart={report.restart} />
     </section>
+  );
+}
+
+const dateTime = (unix: number) =>
+  new Date(unix * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+
+/** Diz exatamente o que o Windows fez com o ponto de restauração. */
+export function RestoreNotice({ outcome, applied }: { outcome: RestoreOutcome; applied: boolean }) {
+  if (outcome.status === "created") {
+    return <p className="muted small" style={{ margin: 0 }}>Ponto de restauração criado agora ({dateTime(outcome.at)}).</p>;
+  }
+  if (outcome.status === "recentValid") {
+    return (
+      <p className="muted small" style={{ margin: 0 }}>
+        O Windows não criou outro ponto porque já existe um de <strong>{dateTime(outcome.at)}</strong> (ele só cria um a cada
+        24 h). Esse ponto continua valendo: restaurar volta o PC ao estado daquela data.
+      </p>
+    );
+  }
+  return (
+    <div className="error-box" role="alert">
+      <strong>A Proteção do Sistema está desligada</strong>, então não existe ponto de restauração.
+      {!applied && " Nada foi alterado."} Ative a proteção no disco C: e tente de novo, ou desmarque a opção para seguir sem ela.
+      <div style={{ marginTop: 8 }}>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => api.openSystemProtection().catch(() => undefined)}
+        >
+          Abrir Proteção do Sistema
+        </button>
+      </div>
+    </div>
   );
 }
