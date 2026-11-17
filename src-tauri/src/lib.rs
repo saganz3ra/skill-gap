@@ -14,6 +14,7 @@ mod power;
 mod restore;
 mod startup;
 mod system;
+mod timer;
 mod tweaks;
 
 use error::{AppError, AppResult};
@@ -380,6 +381,20 @@ async fn net_discard(app: tauri::AppHandle) -> AppResult<()> {
     blocking(move || app.state::<netcfg::NetState>().discard()).await
 }
 
+// ---------------- Timer ----------------
+
+/// Mede o timer agora (sem alterar nada). Leva até ~2 s.
+#[tauri::command]
+async fn timer_measure(app: tauri::AppHandle) -> AppResult<timer::TimerReport> {
+    blocking(move || Ok(timer::measure(sys_profile(&app, false).build))).await
+}
+
+/// Jogos rodando agora que dá pra adicionar ao Modo Jogo (detectados pela pasta).
+#[tauri::command]
+async fn game_suggestions(app: tauri::AppHandle) -> AppResult<Vec<gaming::watcher::GameEntry>> {
+    blocking(move || Ok(app.state::<std::sync::Arc<gaming::watcher::Watcher>>().suggestions())).await
+}
+
 // ---------------- Diagnóstico e resultado ----------------
 
 const SKILLGAP_PLANS: [&str; 2] = ["9f3c1e2a-7b4d-4c8e-a1f0-5d2b8c6e4a01", "9f3c1e2a-7b4d-4c8e-a1f0-5d2b8c6e4a02"];
@@ -572,7 +587,9 @@ pub fn run() {
             net_reset_status,
             net_restore,
             net_discard,
-            diagnosis_run
+            diagnosis_run,
+            timer_measure,
+            game_suggestions
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Skill Gap");

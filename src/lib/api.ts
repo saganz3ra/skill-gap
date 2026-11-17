@@ -96,6 +96,27 @@ export interface WatchConfig {
   lowerBackground: boolean;
   pauseServices: boolean;
   powerBoost: boolean;
+  /** Segura o timer em 0,5 ms durante a partida. */
+  timerMode: boolean;
+  /** Reconhece jogos pela pasta (Steam, Epic, Riot…). */
+  autoDetect: boolean;
+}
+
+export interface TimerStats {
+  meanMs: number;
+  minMs: number;
+  maxMs: number;
+  stddevMs: number;
+}
+
+export interface TimerReport {
+  sleep: TimerStats | null;
+  currentMs: number | null;
+  finestMs: number | null;
+  coarsestMs: number | null;
+  globalRequests: boolean;
+  modeReachesGame: boolean;
+  heldByApp: boolean;
 }
 
 export interface GameSession {
@@ -435,6 +456,8 @@ export const api = {
   gameWatchStatus: () => invoke<WatchStatus>("game_watch_status"),
   gameWatchSave: (config: WatchConfig) => invoke<WatchStatus>("game_watch_save", { config }),
   listRunningProcesses: () => invoke<string[]>("list_running_processes"),
+  timerMeasure: () => invoke<TimerReport>("timer_measure"),
+  gameSuggestions: () => invoke<GameEntry[]>("game_suggestions"),
   onGameSession: (cb: (s: WatchStatus) => void): Promise<UnlistenFn> =>
     listen<WatchStatus>("game-session", (e) => cb(e.payload)),
   tweaksList: () => invoke<TweakView[]>("tweaks_list"),

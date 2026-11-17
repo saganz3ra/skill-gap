@@ -7,6 +7,7 @@
 //!
 //! Nada aqui toca no processo do jogo: só configurações do Windows.
 
+pub mod detect;
 pub mod watcher;
 #[cfg(windows)]
 mod windows;
@@ -156,7 +157,7 @@ pub(crate) use windows::displays;
 use windows::set_refresh;
 /// Reaproveitados pelo motor de ajustes (tweaks) e pelo monitor de jogos.
 #[cfg(windows)]
-pub(crate) use windows::{mouse_get, mouse_set, mouse_speed_get, mouse_speed_set, process_list};
+pub(crate) use windows::{image_path, mouse_get, mouse_set, mouse_speed_get, mouse_speed_set, process_list};
 
 #[cfg(not(windows))]
 pub(crate) fn displays() -> Vec<Display> {

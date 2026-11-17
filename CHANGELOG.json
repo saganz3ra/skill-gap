@@ -22,6 +22,18 @@
       {
         "kind": "novo",
         "text": "Tela Diagnóstico: nota de potencial de otimização (0 a 100) lida do Windows, com a lista do que falta, e a comparação com a primeira leitura separando números firmes (inicialização, serviços, plano, ajustes, espaço liberado) de leituras do momento (RAM, processos)."
+      },
+      {
+        "kind": "novo",
+        "text": "Medição real do timer do Windows no Modo Jogo: 120 pausas de 1 ms medidas com o contador de alta precisão, mais a resolução atual, a mais fina e a padrão. Não altera nada."
+      },
+      {
+        "kind": "novo",
+        "text": "Modo Timer (opcional): segura o timer em 0,5 ms durante a partida e solta ao fechar o jogo. A tela diz se isso chega no jogo no seu Windows (no Windows 11, só com o \"Timer Resolution global\")."
+      },
+      {
+        "kind": "novo",
+        "text": "Jogos reconhecidos pela pasta (Steam, Epic, Riot, Xbox, EA, Ubisoft, GOG), ignorando launchers, instaladores e anticheats, e botão para adicionar os jogos abertos agora. O caminho é lido sem abrir o processo do jogo."
       }
     ]
   },

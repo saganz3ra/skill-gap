@@ -4,7 +4,7 @@ import { RotateCw, ShieldCheck } from "lucide-react";
 import { api, CHECK_INFO, errorMessage, type CheckId, type GamingCheck, type WatchConfig } from "../lib/api";
 import { useResource } from "../hooks/useResource";
 import { Notice, PageHeader, Switch } from "../components/ui";
-import { GameListCard, OptionsCard, SessionCard } from "../components/GameMode";
+import { GameListCard, OptionsCard, SessionCard, SuggestionsCard, TimerCard } from "../components/GameMode";
 import { friendlyError } from "../components/feedback";
 
 const BADGE: Record<GamingCheck["status"], string> = { ok: "badge-ok", warn: "badge-warn", info: "badge-idle" };
@@ -192,9 +192,11 @@ export function ModoJogo() {
         <div className="row-wrap">
           <div style={{ flex: "1 1 380px", minWidth: 0 }}>
             <GameListCard status={watch.data} saving={saving} save={(c) => void save(c)} />
+            <SuggestionsCard status={watch.data} saving={saving} save={(c) => void save(c)} />
           </div>
           <div style={{ flex: "1 1 380px", minWidth: 0 }}>
             <OptionsCard status={watch.data} saving={saving} save={(c) => void save(c)} />
+            <TimerCard />
           </div>
         </div>
       )}

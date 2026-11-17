@@ -74,6 +74,10 @@ pub struct WatchConfig {
     pub lower_background: bool,
     pub pause_services: bool,
     pub power_boost: bool,
+    /// Segura o timer em 0,5 ms durante a partida (só ajuda o jogo em alguns Windows).
+    pub timer_mode: bool,
+    /// Também reconhece jogos pela pasta (Steam, Epic, Riot…), sem precisar adicionar.
+    pub auto_detect: bool,
 }
 
 impl Default for WatchConfig {
@@ -85,6 +89,8 @@ impl Default for WatchConfig {
             lower_background: true,
             pause_services: true,
             power_boost: true,
+            timer_mode: false,
+            auto_detect: false,
         }
     }
 }
@@ -107,6 +113,9 @@ pub struct Session {
     pub restore_guid: Option<String>,
     pub paused_services: Vec<String>,
     pub lowered: Vec<Lowered>,
+    /// O app está segurando o timer nesta partida.
+    #[serde(default)]
+    pub timer: bool,
 }
 
 /// Valor original do IFEO de um executável.
@@ -278,6 +287,19 @@ impl Watcher {
 
     /// Chamado ao abrir o app: se existe uma sessão gravada, o app fechou (ou o PC
     /// desligou) no meio de uma partida. Desfaz o que ficou pendente.
+    /// Jogos rodando agora que ainda não estão na lista (sugestões pra adicionar).
+    pub fn suggestions(&self) -> Vec<GameEntry> {
+        let cfg = lock(&self.config).clone();
+        let mut out: Vec<GameEntry> = Vec::new();
+        for (pid, exe) in self.sys.processes() {
+            let known = cfg.games.iter().any(|g| g.exe.eq_ignore_ascii_case(&exe)) || out.iter().any(|g| g.exe.eq_ignore_ascii_case(&exe));
+            if !known && super::detect::looks_like_game(&exe, self.sys.image_path(pid).as_deref()) {
+                out.push(GameEntry { name: exe.trim_end_matches(".exe").to_string(), exe, high_priority: true });
+            }
+        }
+        out
+    }
+
     pub fn recover(&self) -> bool {
         let Some(pending) = read_json::<Session>(&self.session_path) else { return false };
         self.end_session(pending);
@@ -383,7 +405,8 @@ impl Watcher {
 
     fn start_session(&self, game: GameEntry, cfg: &WatchConfig) -> Session {
         // 1) decide e anota tudo antes de mexer
-        let mut session = Session { game, started_at: now(), restore_guid: None, paused_services: Vec::new(), lowered: Vec::new() };
+        let mut session =
+            Session { game, started_at: now(), restore_guid: None, paused_services: Vec::new(), lowered: Vec::new(), timer: cfg.timer_mode };
 
         let plan = if cfg.power_boost { self.sys.active_plan().ok() } else { None };
         if let Some((guid, current)) = &plan {
@@ -408,6 +431,9 @@ impl Watcher {
             }
         }
         session.paused_services.retain(|s| self.sys.pause_service(s).is_ok());
+        if session.timer {
+            self.sys.set_timer_hold(true);
+        }
         self.persist_session(&session);
         session
     }
@@ -454,6 +480,9 @@ impl Watcher {
         for s in &session.paused_services {
             let _ = self.sys.resume_service(s);
         }
+        if session.timer {
+            self.sys.set_timer_hold(false);
+        }
         if let Some(guid) = &session.restore_guid {
             if let Err(e) = self.sys.set_plan_guid(guid) {
                 self.set_error(Some(format!("Não foi possível voltar ao plano anterior: {e}")));
@@ -465,8 +494,16 @@ impl Watcher {
     /// Uma verificação. Devolve true se algo mudou (pra avisar a interface).
     pub fn tick(&self) -> bool {
         let cfg = lock(&self.config).clone();
-        let procs = if cfg.enabled && !cfg.games.is_empty() { self.sys.processes() } else { Vec::new() };
-        let found = find_running(&cfg.games, procs.iter().map(|(_, n)| n)).cloned();
+        let procs = if cfg.enabled && (!cfg.games.is_empty() || cfg.auto_detect) { self.sys.processes() } else { Vec::new() };
+        let found = find_running(&cfg.games, procs.iter().map(|(_, n)| n)).cloned().or_else(|| {
+            if !cfg.auto_detect {
+                return None;
+            }
+            // Detectado pela pasta: entra só com o que não mexe em registro (sem IFEO).
+            procs.iter().find(|(pid, exe)| super::detect::looks_like_game(exe, self.sys.image_path(*pid).as_deref())).map(|(_, exe)| {
+                GameEntry { name: exe.trim_end_matches(".exe").to_string(), exe: exe.clone(), high_priority: false }
+            })
+        });
 
         let mut slot = lock(&self.session);
         match decide(slot.as_ref().map(|s| &s.game), found.as_ref(), cfg.enabled) {
@@ -632,6 +669,22 @@ mod tests {
         assert_eq!(fake.service("WSearch"), Some(true));
         assert_eq!(fake.service("SysMain"), Some(false), "não liga o que não estava ligado");
         assert_eq!(fake.active_plan().unwrap().1, Some(PowerPlan::Balanced));
+    }
+
+    #[test]
+    fn deteccao_por_pasta_e_modo_timer() {
+        let (w, fake, _dir) = setup("autodetect");
+        let cfg = WatchConfig { enabled: true, auto_detect: true, timer_mode: true, ..Default::default() };
+        w.save(cfg).unwrap();
+        fake.spawn_at(10, "steamwebhelper.exe", r"C:\Steam\steamapps\common\x\steamwebhelper.exe");
+        assert!(!w.tick(), "launcher não é jogo");
+        fake.spawn_at(11, "Hades.exe", r"\Device\HarddiskVolume3\SteamLibrary\steamapps\common\Hades\Hades.exe");
+        assert_eq!(w.suggestions().iter().map(|g| g.exe.as_str()).collect::<Vec<_>>(), ["Hades.exe"]);
+        assert!(w.tick(), "partida começa pelo jogo detectado");
+        assert!(fake.timer_held(), "Modo Timer segura durante a partida");
+        fake.kill(11);
+        assert!(w.tick());
+        assert!(!fake.timer_held(), "e solta quando o jogo fecha");
     }
 
     #[test]

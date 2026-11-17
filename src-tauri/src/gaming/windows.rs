@@ -185,3 +185,47 @@ pub fn process_list() -> Vec<(u32, String)> {
         names
     }
 }
+
+#[repr(C)]
+struct UnicodeString {
+    length: u16,
+    maximum_length: u16,
+    buffer: *mut u16,
+}
+
+#[repr(C)]
+struct SystemProcessIdInformation {
+    process_id: usize,
+    image_name: UnicodeString,
+}
+
+#[link(name = "ntdll")]
+extern "system" {
+    fn NtQuerySystemInformation(class: u32, info: *mut core::ffi::c_void, length: u32, returned: *mut u32) -> i32;
+}
+
+/// Caminho do executável de um PID, em formato NT (`\Device\HarddiskVolume3\...`).
+/// Usa a classe `SystemProcessIdInformation` (88): NÃO abre handle para o processo,
+/// então nem anticheat nem processo protegido "veem" a consulta.
+pub fn image_path(pid: u32) -> Option<String> {
+    const SYSTEM_PROCESS_ID_INFORMATION: u32 = 88;
+    let mut buf = vec![0u16; 1024];
+    let mut info = SystemProcessIdInformation {
+        process_id: pid as usize,
+        image_name: UnicodeString { length: 0, maximum_length: (buf.len() * 2) as u16, buffer: buf.as_mut_ptr() },
+    };
+    // SAFETY: struct no layout esperado pela ntdll; o buffer vive até o fim da função.
+    let status = unsafe {
+        NtQuerySystemInformation(
+            SYSTEM_PROCESS_ID_INFORMATION,
+            (&mut info as *mut SystemProcessIdInformation).cast(),
+            size_of::<SystemProcessIdInformation>() as u32,
+            std::ptr::null_mut(),
+        )
+    };
+    if status < 0 {
+        return None;
+    }
+    let len = (info.image_name.length / 2) as usize;
+    Some(String::from_utf16_lossy(&buf[..len.min(buf.len())]))
+}

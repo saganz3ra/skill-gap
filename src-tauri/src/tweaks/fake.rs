@@ -28,6 +28,8 @@ struct State {
     net: HashMap<NetKey, String>,
     /// (env, arquivo) -> objeto JSON.
     json: HashMap<(String, String), serde_json::Map<String, serde_json::Value>>,
+    paths: HashMap<u32, String>,
+    timer_held: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,6 +56,8 @@ impl Default for State {
             page_combining: true,
             net: HashMap::new(),
             json: HashMap::new(),
+            paths: HashMap::new(),
+            timer_held: false,
         }
     }
 }
@@ -109,6 +113,13 @@ impl FakeSys {
     }
     pub fn json(&self, env: &str, file: &str) -> Option<serde_json::Value> {
         self.0.lock().unwrap().json.get(&(env.to_string(), file.to_string())).map(|m| serde_json::Value::Object(m.clone()))
+    }
+    pub fn spawn_at(&self, pid: u32, exe: &str, path: &str) {
+        self.spawn(pid, exe);
+        self.0.lock().unwrap().paths.insert(pid, path.into());
+    }
+    pub fn timer_held(&self) -> bool {
+        self.0.lock().unwrap().timer_held
     }
     pub fn deny_hklm(&self) {
         self.0.lock().unwrap().deny_hklm = true;
@@ -322,6 +333,12 @@ impl Sys for FakeSys {
 }
 
 impl GameSys for FakeSys {
+    fn image_path(&self, pid: u32) -> Option<String> {
+        self.0.lock().unwrap().paths.get(&pid).cloned()
+    }
+    fn set_timer_hold(&self, on: bool) {
+        self.0.lock().unwrap().timer_held = on;
+    }
     fn processes(&self) -> Vec<(u32, String)> {
         self.0.lock().unwrap().procs.iter().map(|(p, n, _)| (*p, n.clone())).collect()
     }
