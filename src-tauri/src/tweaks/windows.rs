@@ -19,7 +19,7 @@ use windows_sys::Win32::System::Threading::{
     GetPriorityClass, OpenProcess, SetPriorityClass, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SET_INFORMATION,
 };
 
-use super::ops::{GameSys, Hive, Sys};
+use super::ops::{is_guid_plain, is_task_path, parse_qh_ac, parse_task_enabled, GameSys, Hive, NetKey, Sys};
 use crate::error::{AppError, AppResult};
 use crate::power::{self, PowerPlan};
 
@@ -144,6 +144,108 @@ impl Sys for WinSys {
     fn set_memory_compression(&self, enabled: bool) -> AppResult<()> {
         let cmd = if enabled { "Enable-MMAgent -MemoryCompression" } else { "Disable-MMAgent -MemoryCompression" };
         crate::system::powershell(cmd).map(|_| ())
+    }
+
+    fn power_value(&self, sub: &str, setting: &str) -> AppResult<Option<(String, u32)>> {
+        if !is_guid_plain(sub) || !is_guid_plain(setting) {
+            return Err(AppError::InvalidInput("GUID de energia inválido".into()));
+        }
+        let plan = power::active()?.guid;
+        let out = tool("powercfg", &["/qh", &plan, sub, setting])?;
+        // Configuração inexistente: o powercfg falha (ou não imprime os índices).
+        Ok(out.ok().and_then(|text| parse_qh_ac(&text)).map(|v| (plan, v)))
+    }
+
+    fn set_power_value(&self, plan: &str, sub: &str, setting: &str, ac: u32) -> AppResult<()> {
+        if !is_guid_plain(plan) || !is_guid_plain(sub) || !is_guid_plain(setting) {
+            return Err(AppError::InvalidInput("GUID de energia inválido".into()));
+        }
+        let value = ac.to_string();
+        must(tool("powercfg", &["/setacvalueindex", plan, sub, setting, &value])?, "powercfg")?;
+        // Só reativa se for o plano ativo: valor no plano ativo só vale depois do /setactive.
+        if power::active()?.guid.eq_ignore_ascii_case(plan) {
+            must(tool("powercfg", &["/setactive", plan])?, "powercfg")?;
+        }
+        Ok(())
+    }
+
+    fn task_enabled(&self, path: &str) -> Option<bool> {
+        if !is_task_path(path) {
+            return None;
+        }
+        tool("schtasks", &["/Query", "/TN", path, "/XML"]).ok()?.ok().and_then(|xml| parse_task_enabled(&xml))
+    }
+
+    fn set_task_enabled(&self, path: &str, enabled: bool) -> AppResult<()> {
+        if !is_task_path(path) {
+            return Err(AppError::InvalidInput("caminho de tarefa inválido".into()));
+        }
+        must(tool("schtasks", &["/Change", "/TN", path, if enabled { "/ENABLE" } else { "/DISABLE" }])?, "schtasks")
+    }
+
+    fn page_combining(&self) -> AppResult<bool> {
+        let out = crate::system::powershell("(Get-MMAgent).PageCombining")?;
+        Ok(out.trim().eq_ignore_ascii_case("true"))
+    }
+
+    fn set_page_combining(&self, enabled: bool) -> AppResult<()> {
+        let cmd = if enabled { "Enable-MMAgent -PageCombining" } else { "Disable-MMAgent -PageCombining" };
+        crate::system::powershell(cmd).map(|_| ())
+    }
+
+    fn net_setting(&self, key: NetKey) -> AppResult<String> {
+        let out = crate::system::powershell(key.get_script())?;
+        key.canonical(&out)
+            .map(str::to_string)
+            .ok_or_else(|| AppError::Unavailable(format!("este Windows não informa {key:?}")))
+    }
+
+    fn set_net_setting(&self, key: NetKey, value: &str) -> AppResult<()> {
+        let script = key.set_script(value).ok_or_else(|| AppError::InvalidInput(format!("valor fora da lista: {value}")))?;
+        crate::system::powershell(&script).map(|_| ())
+    }
+
+    fn json_file_exists(&self, env: &str, file: &str) -> bool {
+        super::jsonfile::resolve(env, file).is_some_and(|p| p.is_file())
+    }
+
+    fn json_key(&self, env: &str, file: &str, key: &str) -> AppResult<Option<String>> {
+        let path = super::jsonfile::resolve(env, file).ok_or_else(|| AppError::InvalidInput(file.into()))?;
+        super::jsonfile::get(&path, key)
+    }
+
+    fn set_json_key(&self, env: &str, file: &str, key: &str, value: Option<&str>) -> AppResult<()> {
+        let path = super::jsonfile::resolve(env, file).ok_or_else(|| AppError::InvalidInput(file.into()))?;
+        super::jsonfile::set(&path, key, value)
+    }
+}
+
+/// Roda uma ferramenta do Windows. `Ok(Err(texto))` = rodou e falhou (o texto ajuda a
+/// decidir); `Err` = nem conseguiu rodar.
+fn tool(program: &str, args: &[&str]) -> AppResult<Result<String, String>> {
+    let out = Command::new(program).args(args).creation_flags(CREATE_NO_WINDOW).output()?;
+    let text = crate::system::decode_console(&out.stdout);
+    if out.status.success() {
+        Ok(Ok(text))
+    } else {
+        let err = crate::system::decode_console(&out.stderr);
+        Ok(Err(if err.trim().is_empty() { text } else { err }))
+    }
+}
+
+/// Falha de ferramenta vira erro tipado; "acesso negado" vira RequiresAdmin (o
+/// `ElevatedSys` repete no auxiliar elevado).
+fn must(r: Result<String, String>, program: &str) -> AppResult<()> {
+    match r {
+        Ok(_) => Ok(()),
+        Err(text) => {
+            let lower = text.to_lowercase();
+            if lower.contains("acesso negado") || lower.contains("access is denied") || lower.contains("0x80070005") {
+                Err(AppError::RequiresAdmin)
+            } else {
+                Err(AppError::CommandFailed { command: program.into(), detail: text.trim().to_string() })
+            }
+        }
     }
 }
 
