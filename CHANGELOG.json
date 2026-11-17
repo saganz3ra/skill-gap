@@ -78,6 +78,10 @@
       {
         "kind": "novo",
         "text": "Segunda tela no celular: QR code com endereço só da rede local, chave nova a cada vez, desliga junto com o interruptor."
+      },
+      {
+        "kind": "novo",
+        "text": "Tour rápido na primeira abertura, com os pontos principais do app. Dá para pular."
       }
     ]
   },

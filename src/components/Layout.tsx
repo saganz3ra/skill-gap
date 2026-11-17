@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import { Tour } from "./Tour";
 import { api, NEWS_SEEN_EVENT, type ElevationStatus, type WhatsNew } from "../lib/api";
 import {
   Activity,
@@ -98,6 +99,7 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
+      <Tour />
     </div>
   );
 }
