@@ -8,6 +8,7 @@ mod fixes;
 mod gaming;
 mod monitor;
 mod power;
+mod restore;
 mod startup;
 mod system;
 mod tweaks;
@@ -175,15 +176,26 @@ async fn profiles_list(app: tauri::AppHandle) -> AppResult<Vec<tweaks::ProfileVi
     Ok(engine(&app).profiles())
 }
 
-/// Aplica um perfil. Com `restore_point`, cria o ponto ANTES e aborta se não conseguir:
-/// melhor não mexer do que mexer sem a rede de segurança que o usuário pediu.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProfileApplyResult {
+    /// O que aconteceu com o ponto pedido (`None` = não pedido).
+    restore_point: Option<restore::Outcome>,
+    /// `None` = nada foi aplicado (proteção desligada com o ponto pedido).
+    report: Option<tweaks::BatchReport>,
+}
+
+/// Aplica um perfil. Com `restore_point`, garante o ponto ANTES e aborta se não houver
+/// rede de segurança: melhor não mexer do que mexer sem a proteção que o usuário pediu.
 #[tauri::command]
-async fn profile_apply(app: tauri::AppHandle, id: String, restore_point: bool) -> AppResult<tweaks::BatchReport> {
+async fn profile_apply(app: tauri::AppHandle, id: String, restore_point: bool) -> AppResult<ProfileApplyResult> {
     blocking(move || {
-        if restore_point {
-            restore_point_now()?;
+        let outcome = if restore_point { Some(restore_point_now(&app, false)?) } else { None };
+        if outcome == Some(restore::Outcome::ProtectionOff) {
+            return Ok(ProfileApplyResult { restore_point: outcome, report: None });
         }
-        engine(&app).apply_profile(&id, system::is_laptop())
+        let report = engine(&app).apply_profile(&id, system::is_laptop())?;
+        Ok(ProfileApplyResult { restore_point: outcome, report: Some(report) })
     })
     .await
 }
@@ -203,13 +215,25 @@ async fn system_info() -> AppResult<system::SystemInfo> {
     blocking(|| Ok(system::info())).await
 }
 
-fn restore_point_now() -> AppResult<()> {
-    elevation::admin_or_elevated(system::create_restore_point, elevation::Request::RestorePoint, |_| {}, elevation::unit)
+/// `manual`: clique em "Criar ponto" (sempre pergunta ao Windows). Automático (antes
+/// de um perfil) reaproveita o ponto que o app criou há menos de 24 h.
+fn restore_point_now(app: &tauri::AppHandle, manual: bool) -> AppResult<restore::Outcome> {
+    let state = app.state::<restore::RestoreState>();
+    state.ensure(manual, restore::protection_is_off(), || {
+        elevation::admin_or_elevated(restore::create, elevation::Request::RestorePoint, |_| {}, |v| {
+            serde_json::from_value(v).map_err(|e| AppError::Helper(e.to_string()))
+        })
+    })
 }
 
 #[tauri::command]
-async fn create_restore_point() -> AppResult<()> {
-    blocking(restore_point_now).await
+async fn create_restore_point(app: tauri::AppHandle) -> AppResult<restore::Outcome> {
+    blocking(move || restore_point_now(&app, true)).await
+}
+
+#[tauri::command]
+async fn open_system_protection() -> AppResult<()> {
+    blocking(restore::open_protection_settings).await
 }
 
 #[tauri::command]
@@ -368,6 +392,7 @@ pub fn run() {
             let journal = dir.join("tweaks.json");
             app.manage(tweaks::TweakEngine::load(tweaks::platform_sys(), journal));
             app.manage(power::plans::EnergyState::load(dir.join("energia.json")));
+            app.manage(restore::RestoreState::load(dir.join("ponto-restauracao.json")));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -394,6 +419,7 @@ pub fn run() {
             profile_delete,
             system_info,
             create_restore_point,
+            open_system_protection,
             restart_explorer,
             monitor_sample,
             hardware_info,

@@ -139,6 +139,18 @@ export interface ProfileView {
   builtin: boolean;
 }
 
+/** O que o Windows fez com o pedido de ponto de restauração. */
+export type RestoreOutcome =
+  | { status: "created"; at: number }
+  | { status: "recentValid"; at: number }
+  | { status: "protectionOff" };
+
+export interface ProfileApplyResult {
+  restorePoint: RestoreOutcome | null;
+  /** `null`: nada foi aplicado (a Proteção do Sistema está desligada). */
+  report: BatchReport | null;
+}
+
 export interface BatchReport {
   applied: string[];
   skipped: string[];
@@ -339,11 +351,12 @@ export const api = {
   tweaksRevertAll: () => invoke<BatchReport>("tweaks_revert_all"),
   tweakSetFavorite: (id: string, favorite: boolean) => invoke<void>("tweak_set_favorite", { id, favorite }),
   profilesList: () => invoke<ProfileView[]>("profiles_list"),
-  profileApply: (id: string, restorePoint: boolean) => invoke<BatchReport>("profile_apply", { id, restorePoint }),
+  profileApply: (id: string, restorePoint: boolean) => invoke<ProfileApplyResult>("profile_apply", { id, restorePoint }),
   profileSave: (name: string) => invoke<ProfileView>("profile_save", { name }),
   profileDelete: (id: string) => invoke<void>("profile_delete", { id }),
   systemInfo: () => invoke<SystemInfo>("system_info"),
-  createRestorePoint: () => invoke<void>("create_restore_point"),
+  createRestorePoint: () => invoke<RestoreOutcome>("create_restore_point"),
+  openSystemProtection: () => invoke<void>("open_system_protection"),
   restartExplorer: () => invoke<void>("restart_explorer"),
   monitorSample: () => invoke<MonitorSample>("monitor_sample"),
   hardwareInfo: () => invoke<HardwareInfo>("hardware_info"),
