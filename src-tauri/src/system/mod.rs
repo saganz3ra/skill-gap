@@ -84,7 +84,7 @@ pub fn parse_media_type(s: &str) -> DiskKind {
 }
 
 #[cfg(windows)]
-pub use windows::{create_restore_point, info, is_admin, is_laptop, powershell, restart_explorer};
+pub use windows::{info, is_admin, is_laptop, powershell, restart_explorer};
 
 #[cfg(not(windows))]
 pub fn info() -> SystemInfo {
@@ -109,11 +109,6 @@ pub fn is_admin() -> bool {
 #[cfg(not(windows))]
 pub fn is_laptop() -> bool {
     false
-}
-
-#[cfg(not(windows))]
-pub fn create_restore_point() -> crate::error::AppResult<()> {
-    Err(crate::error::AppError::Unsupported)
 }
 
 #[cfg(not(windows))]

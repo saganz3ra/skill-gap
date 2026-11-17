@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 
-import { api, type BatchReport, type ProfileView, type SystemInfo } from "../lib/api";
+import { api, type BatchReport, type RestoreOutcome, type ProfileView, type SystemInfo } from "../lib/api";
 import { useResource } from "../hooks/useResource";
 import { PageHeader } from "../components/ui";
-import { BatchSummary, friendlyError } from "../components/feedback";
+import { BatchSummary, friendlyError, RestoreNotice } from "../components/feedback";
 
 const DISK_LABEL: Record<SystemInfo["systemDisk"], string> = { ssd: "SSD", hdd: "HD mecânico", unknown: "Não identificado" };
 
@@ -15,6 +15,7 @@ export function Perfis() {
   const [restorePoint, setRestorePoint] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [report, setReport] = useState<{ profile: string; report: BatchReport } | null>(null);
+  const [restore, setRestore] = useState<RestoreOutcome | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const names = useMemo(() => new Map((tweaks.data ?? []).map((t) => [t.id, t.name])), [tweaks.data]);
@@ -34,9 +35,11 @@ export function Perfis() {
     setBusy(p.id);
     setMessage(null);
     setReport(null);
+    setRestore(null);
     try {
       const r = await api.profileApply(p.id, wantsRestore);
-      setReport({ profile: p.name, report: r });
+      setRestore(r.restorePoint);
+      if (r.report) setReport({ profile: p.name, report: r.report });
       await tweaks.reload();
     } catch (e) {
       setMessage(
@@ -120,6 +123,7 @@ export function Perfis() {
           {message}
         </div>
       )}
+      {restore && <RestoreNotice outcome={restore} applied={report !== null} />}
       {report && <BatchSummary report={report.report} names={names} verb={`aplicados pelo perfil ${report.profile}`} />}
 
       <div className="tweak-grid">
