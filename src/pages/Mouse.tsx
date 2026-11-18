@@ -144,11 +144,11 @@ function PollingTest() {
       <div className="session-stats" aria-live="polite">
         <div>
           <span className="stat-label">Medido</span>
-          <strong>{median ? `${median} Hz` : "—"}</strong>
+          <strong>{median ? `${median} Hz` : "…"}</strong>
         </div>
         <div>
           <span className="stat-label">Taxa provável</span>
-          <strong>{estimate ? `${estimate} Hz` : "—"}</strong>
+          <strong>{estimate ? `${estimate} Hz` : "…"}</strong>
         </div>
         <div>
           <span className="stat-label">Método</span>

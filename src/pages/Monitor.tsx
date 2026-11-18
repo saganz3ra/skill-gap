@@ -55,7 +55,7 @@ export function Monitor() {
           <h2 id="m-cpu" className="card-title">
             CPU
           </h2>
-          <span className="monitor-value">{now ? pct(now.cpu) : "—"}</span>
+          <span className="monitor-value">{now ? pct(now.cpu) : "…"}</span>
         </div>
         <LiveChart values={series("cpu")} max={100} format={pct} label="Uso de CPU" />
         <p className="monitor-meta">
@@ -77,7 +77,7 @@ export function Monitor() {
               Memória
             </h2>
             <span className="monitor-value">
-              {now ? `${formatBytes(now.ramUsed)} / ${formatBytes(now.ramTotal)}` : "—"}
+              {now ? `${formatBytes(now.ramUsed)} / ${formatBytes(now.ramTotal)}` : "…"}
             </span>
           </div>
           <LiveChart values={ramPct} max={100} format={pct} label="Memória em uso" />
@@ -97,7 +97,7 @@ export function Monitor() {
             <h2 id="m-gpu" className="card-title">
               GPU
             </h2>
-            <span className="monitor-value">{now?.gpu != null ? pct(now.gpu) : "—"}</span>
+            <span className="monitor-value">{now?.gpu != null ? pct(now.gpu) : now ? "n/d" : "…"}</span>
           </div>
           <LiveChart values={series("gpu")} max={100} format={pct} label="Uso da GPU (3D)" />
           <p className="monitor-meta">
@@ -112,7 +112,7 @@ export function Monitor() {
             <h2 id="m-disk" className="card-title">
               Disco
             </h2>
-            <span className="monitor-value">{now ? pct(now.diskActive) : "—"}</span>
+            <span className="monitor-value">{now ? pct(now.diskActive) : "…"}</span>
           </div>
           <LiveChart values={series("diskActive")} max={100} format={pct} label="Tempo ativo do disco" />
           <p className="monitor-meta">
@@ -131,7 +131,7 @@ export function Monitor() {
             <h2 id="m-net" className="card-title">
               Rede
             </h2>
-            <span className="monitor-value">{now ? `↓ ${formatRate(now.netDown)}` : "—"}</span>
+            <span className="monitor-value">{now ? `↓ ${formatRate(now.netDown)}` : "…"}</span>
           </div>
           <LiveChart values={series("netDown")} format={formatRate} label="Recebendo" />
           <p className="monitor-meta">

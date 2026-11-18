@@ -162,7 +162,7 @@ export function Drivers() {
                       <td className="mono small">{d.class}</td>
                       <td>{d.provider}</td>
                       <td className="mono small">{d.version}</td>
-                      <td className="small">{d.date ? formatDate(d.date) : "—"}</td>
+                      <td className="small">{d.date ? formatDate(d.date) : "sem data"}</td>
                     </tr>
                   ))}
                 </tbody>

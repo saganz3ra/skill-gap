@@ -8,7 +8,7 @@ import { PageHeader } from "../components/ui";
 import { friendlyError } from "../components/feedback";
 
 function show(row: ComparisonRow, value: unknown): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "n/d";
   if (row.kind === "bytes") return formatBytes(Number(value));
   if (row.kind === "score") return `${value}/100`;
   return String(value);
@@ -61,14 +61,14 @@ export function Diagnostico() {
           </button>
         </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <span className="stat-value">{d ? d.potential : "—"}</span>
+          <span className="stat-value">{d ? d.potential : "…"}</span>
           <span className="muted small">de 100 · quanto menor, mais otimizado</span>
         </div>
         <div className="progress" aria-hidden="true">
           <span style={{ width: `${d?.potential ?? 0}%` }} />
         </div>
         <p className="muted small" style={{ margin: 0 }}>
-          A nota pesa {d?.findings.length ?? "—"} itens conhecidos e vem só do estado atual do Windows: se alguém desfizer algo
+          A nota pesa {d?.findings.length ?? "vários"} itens conhecidos e vem só do estado atual do Windows: se alguém desfizer algo
           por fora do app, ela sobe de novo.
         </p>
         <ul className="diag-list">
@@ -83,8 +83,8 @@ export function Diagnostico() {
               )}
               <span>
                 {f.label}
-                {f.optimized === false && <span className="muted small"> — {f.hint}</span>}
-                {f.optimized === null && <span className="muted small"> — não deu pra ler</span>}
+                {f.optimized === false && <span className="muted small">: {f.hint}</span>}
+                {f.optimized === null && <span className="muted small">: não deu pra ler</span>}
               </span>
             </li>
           ))}

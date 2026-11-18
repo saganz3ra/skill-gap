@@ -1,5 +1,31 @@
 [
   {
+    "version": "0.3.1",
+    "date": null,
+    "items": [
+      {
+        "kind": "melhoria",
+        "text": "“Todos os ajustes” abre bem mais rápido: cada valor do Windows é lido uma vez só, em paralelo, e ligar ou desligar um ajuste atualiza só aquele cartão."
+      },
+      {
+        "kind": "melhoria",
+        "text": "Correções com cartões do mesmo tamanho e o botão sempre na base, como em “Todos os ajustes”."
+      },
+      {
+        "kind": "melhoria",
+        "text": "Modo Jogo reorganizado: o Timer do Windows fica ao lado do diagnóstico, sem espaço vazio."
+      },
+      {
+        "kind": "mudanca",
+        "text": "Cartões de ajuste sem a borda vermelha nos ativos; o interruptor já mostra o estado."
+      },
+      {
+        "kind": "mudanca",
+        "text": "Valores vazios aparecem como “…” (carregando) ou “n/d” (o Windows não informa)."
+      }
+    ]
+  },
+  {
     "version": "0.3.0",
     "date": "2026-11-17",
     "items": [

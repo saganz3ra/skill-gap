@@ -137,8 +137,7 @@ impl Sys for WinSys {
     }
 
     fn memory_compression(&self) -> AppResult<bool> {
-        let out = crate::system::powershell("(Get-MMAgent).MemoryCompression")?;
-        Ok(out.trim().eq_ignore_ascii_case("true"))
+        mm_agent().map(|(compression, _)| compression)
     }
 
     fn set_memory_compression(&self, enabled: bool) -> AppResult<()> {
@@ -150,8 +149,9 @@ impl Sys for WinSys {
         if !is_guid_plain(sub) || !is_guid_plain(setting) {
             return Err(AppError::InvalidInput("GUID de energia inválido".into()));
         }
-        let plan = power::active()?.guid;
-        let out = tool("powercfg", &["/qh", &plan, sub, setting])?;
+        let plan = super::readcache::get("power-active", || power::active().map(|p| p.guid).map_err(|e| e.to_string()))
+            .map_err(AppError::Unavailable)?;
+        let out = tool_cached("powercfg", &["/qh", &plan, sub, setting])?;
         // Configuração inexistente: o powercfg falha (ou não imprime os índices).
         Ok(out.ok().and_then(|text| parse_qh_ac(&text)).map(|v| (plan, v)))
     }
@@ -173,7 +173,7 @@ impl Sys for WinSys {
         if !is_task_path(path) {
             return None;
         }
-        tool("schtasks", &["/Query", "/TN", path, "/XML"]).ok()?.ok().and_then(|xml| parse_task_enabled(&xml))
+        tool_cached("schtasks", &["/Query", "/TN", path, "/XML"]).ok()?.ok().and_then(|xml| parse_task_enabled(&xml))
     }
 
     fn set_task_enabled(&self, path: &str, enabled: bool) -> AppResult<()> {
@@ -184,8 +184,7 @@ impl Sys for WinSys {
     }
 
     fn page_combining(&self) -> AppResult<bool> {
-        let out = crate::system::powershell("(Get-MMAgent).PageCombining")?;
-        Ok(out.trim().eq_ignore_ascii_case("true"))
+        mm_agent().map(|(_, combining)| combining)
     }
 
     fn set_page_combining(&self, enabled: bool) -> AppResult<()> {
@@ -194,7 +193,9 @@ impl Sys for WinSys {
     }
 
     fn net_setting(&self, key: NetKey) -> AppResult<String> {
-        let out = crate::system::powershell(key.get_script())?;
+        let script = key.get_script();
+        let out = super::readcache::get(&format!("ps:{script}"), || crate::system::powershell(script).map_err(|e| e.to_string()))
+            .map_err(|e| AppError::CommandFailed { command: "PowerShell".into(), detail: e })?;
         key.canonical(&out)
             .map(str::to_string)
             .ok_or_else(|| AppError::Unavailable(format!("este Windows não informa {key:?}")))
@@ -218,6 +219,27 @@ impl Sys for WinSys {
         let path = super::jsonfile::resolve(env, file).ok_or_else(|| AppError::InvalidInput(file.into()))?;
         super::jsonfile::set(&path, key, value)
     }
+}
+
+/// As duas opções do Get-MMAgent numa leitura só (cada PowerShell custa ~0,5 s).
+fn mm_agent() -> AppResult<(bool, bool)> {
+    super::readcache::get("mmagent", || {
+        crate::system::powershell("$m = Get-MMAgent; \"$($m.MemoryCompression) $($m.PageCombining)\"").map_err(|e| e.to_string())
+    })
+    .map_err(|e| AppError::CommandFailed { command: "PowerShell".into(), detail: e })
+    .and_then(|out| {
+        let mut it = out.split_whitespace().map(|w| w.eq_ignore_ascii_case("true"));
+        match (it.next(), it.next()) {
+            (Some(a), Some(b)) => Ok((a, b)),
+            _ => Err(AppError::Unavailable("Get-MMAgent sem resposta".into())),
+        }
+    })
+}
+
+/// `tool` para leituras, aproveitando o resultado dentro de uma rodada de leitura.
+fn tool_cached(program: &str, args: &[&str]) -> AppResult<Result<String, String>> {
+    let key = format!("{program} {}", args.join(" "));
+    super::readcache::get(&key, || tool(program, args).map_err(|e| e.to_string())).map_err(AppError::Unavailable)
 }
 
 /// Roda uma ferramenta do Windows. `Ok(Err(texto))` = rodou e falhou (o texto ajuda a

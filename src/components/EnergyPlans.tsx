@@ -35,7 +35,7 @@ export function EnergyPlans({ onChange }: { onChange: () => void }) {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {status.data && (
             <span className="muted small">
-              Ativo: <strong style={{ color: "var(--text)" }}>{status.data.activeName || "—"}</strong>
+              Ativo: <strong style={{ color: "var(--text)" }}>{status.data.activeName || "sem nome"}</strong>
             </span>
           )}
           <button

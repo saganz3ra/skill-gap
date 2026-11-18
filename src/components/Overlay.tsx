@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import { api, errorMessage, type PresentMonStatus, type RemoteInfo, type Telemetry } from "../lib/api";
 import { Switch } from "./ui";
 
-const n = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "—" : v.toFixed(d));
+const n = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "…" : v.toFixed(d));
 
 /** Janela do overlay: transparente, clique passa direto. Lê 1×/s enquanto aberta. */
 export function OverlayWindow() {
@@ -34,7 +34,7 @@ export function OverlayWindow() {
         {t?.frames ? `${n(t.frames.frametimeMs, 1)} ms · var ${n(t.frames.varMs, 1)}` : t?.game ? "medindo…" : "sem jogo do Modo Jogo"}
       </div>
       <div className="overlay-row">
-        CPU {n(s?.cpu)}%{s?.cpuTemp ? ` · ~${n(s.cpuTemp)}°` : ""} · GPU {s?.gpu === null || s?.gpu === undefined ? "—" : `${n(s.gpu)}%`}
+        CPU {n(s?.cpu)}%{s?.cpuTemp ? ` · ~${n(s.cpuTemp)}°` : ""} · GPU {s?.gpu === null || s?.gpu === undefined ? "n/d" : `${n(s.gpu)}%`}
         {t?.gpuTemp ? ` · ${n(t.gpuTemp)}°` : ""}
       </div>
       <div className="overlay-row">

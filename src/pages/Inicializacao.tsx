@@ -112,7 +112,7 @@ export function Inicializacao() {
                     {delayOf(item) !== undefined ? (
                       <span className="badge badge-warn">+{formatMs(delayOf(item)!)}</span>
                     ) : (
-                      <span className="muted small">—</span>
+                      <span className="muted small">sem registro</span>
                     )}
                   </td>
                   <td>

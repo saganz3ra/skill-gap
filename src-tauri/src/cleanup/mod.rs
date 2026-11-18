@@ -68,7 +68,7 @@ impl CleanupCategory {
 #[serde(rename_all = "camelCase")]
 pub struct CategoryScan {
     pub category: CleanupCategory,
-    /// Caminho real (já expandido) — o front mostra pro usuário saber o que será apagado.
+    /// Caminho real (já expandido): o front mostra pro usuário saber o que será apagado.
     pub path: String,
     pub bytes: u64,
     pub files: u64,
