@@ -1,11 +1,13 @@
-# Gera o instalador e cria uma Release (rascunho) quando você envia uma tag de versão:
-#   git tag v0.2.0 && git push origin v0.2.0
-# A tag precisa bater com "version" do src-tauri/tauri.conf.json.
+# Gera o instalador e cria uma Release (rascunho) de dois jeitos:
+#   1. enviando uma tag de versão: git tag v0.3.1 && git push origin v0.3.1
+#   2. sem git: GitHub › Actions › Release › "Run workflow" (na main). A tag vem da
+#      versão do src-tauri/tauri.conf.json e é criada quando você publica o rascunho.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write # criar a Release e anexar o instalador
@@ -18,12 +20,35 @@ jobs:
 
       - name: Tag confere com a versão do app e com o CHANGELOG
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          if ("v$version" -ne "${{ github.ref_name }}") {
-            Write-Error "A tag ${{ github.ref_name }} não bate com a versão $version do tauri.conf.json"
-            exit 1
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            # Pelo botão: só da main, e nunca por cima de uma versão que já existe.
+            if ("${{ github.ref }}" -ne "refs/heads/main") {
+              Write-Error "Rode a Release a partir da main (rodou em ${{ github.ref_name }})"
+              exit 1
+            }
+            $tag = "v$version"
+            gh api "repos/${{ github.repository }}/git/ref/tags/$tag" 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+              Write-Error "A tag $tag já existe: suba a versão no tauri.conf.json, package.json, Cargo.toml e CHANGELOG.json"
+              exit 1
+            }
+            $existing = gh api "repos/${{ github.repository }}/releases" --jq ".[].tag_name" | Where-Object { $_ -eq $tag }
+            if ($existing) {
+              Write-Error "Já existe uma Release (talvez rascunho) para $tag: apague-a antes"
+              exit 1
+            }
+          } else {
+            $tag = "${{ github.ref_name }}"
+            if ("v$version" -ne $tag) {
+              Write-Error "A tag $tag não bate com a versão $version do tauri.conf.json"
+              exit 1
+            }
           }
+          "TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           # A primeira entrada do CHANGELOG.json é a versão lançada e precisa de data:
           # sem ela, a tela de novidades mostraria "em desenvolvimento" pra todo mundo.
           $latest = (Get-Content CHANGELOG.json -Raw | ConvertFrom-Json)[0]
@@ -54,8 +79,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Skill Gap ${{ github.ref_name }}"
+          tagName: ${{ env.TAG }}
+          releaseName: "Skill Gap ${{ env.TAG }}"
+          # A tag (criada ao publicar o rascunho) aponta para o commit testado aqui.
+          releaseCommitish: ${{ github.sha }}
           releaseBody: |
             Instalador para Windows 10/11 (64 bits): baixe o arquivo `*_x64-setup.exe` abaixo.
 
