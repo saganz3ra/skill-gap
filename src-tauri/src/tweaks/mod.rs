@@ -2,7 +2,7 @@
 //!
 //! Fluxo de "aplicar" (a ordem importa):
 //! 1. tira a foto dos valores atuais;
-//! 2. GRAVA a foto em disco (diário) — "anota antes de mexer";
+//! 2. GRAVA a foto em disco (diário): "anota antes de mexer";
 //! 3. aplica as operações; se uma falhar, desfaz as que já foram e devolve o erro.
 //!
 //! Se o PC desligar entre 2 e 3, a foto já está salva e o "Desfazer" continua
@@ -12,6 +12,7 @@ pub mod catalog;
 pub mod jsonfile;
 pub mod net;
 pub mod ops;
+pub mod readcache;
 #[cfg(windows)]
 pub mod elevated;
 #[cfg(windows)]
@@ -197,31 +198,44 @@ impl TweakEngine {
     pub fn status_of(&self, id: &str) -> AppResult<(TweakState, bool)> {
         let tweak = find(id)?;
         let can_revert = self.lock().snapshots.contains_key(id);
-        Ok((self.state(tweak), can_revert))
+        Ok((readcache::scope(|| self.state(tweak)), can_revert))
     }
 
     pub fn list(&self, sys: &SystemProfile) -> Vec<TweakView> {
         let store = self.lock().clone();
-        TWEAKS
-            .iter()
-            .map(|t| TweakView {
-                id: t.id,
-                name: t.name,
-                description: t.description,
-                details: t.details,
-                category: t.category,
-                impact: t.impact,
-                restart: t.restart,
-                requires_admin: t.requires_admin(),
-                risk: t.risk,
-                breaks: t.breaks,
-                heats: t.heats,
-                gate: self.gate(t, sys),
-                state: self.state(t),
-                can_revert: store.snapshots.contains_key(t.id),
-                favorite: store.favorites.contains(t.id),
+        // Cada ajuste pergunta ao Windows (às vezes abrindo PowerShell): em paralelo,
+        // e numa rodada de leitura, para cada valor ser lido uma vez só.
+        const WORKERS: usize = 8;
+        let chunk = TWEAKS.len().div_ceil(WORKERS).max(1);
+        readcache::scope(|| {
+            std::thread::scope(|s| {
+                let handles: Vec<_> = TWEAKS
+                    .chunks(chunk)
+                    .map(|part| s.spawn(|| part.iter().map(|t| self.view(t, sys, &store)).collect::<Vec<_>>()))
+                    .collect();
+                handles.into_iter().flat_map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).collect()
             })
-            .collect()
+        })
+    }
+
+    fn view(&self, t: &Tweak, sys: &SystemProfile, store: &Store) -> TweakView {
+        TweakView {
+            id: t.id,
+            name: t.name,
+            description: t.description,
+            details: t.details,
+            category: t.category,
+            impact: t.impact,
+            restart: t.restart,
+            requires_admin: t.requires_admin(),
+            risk: t.risk,
+            breaks: t.breaks,
+            heats: t.heats,
+            gate: self.gate(t, sys),
+            state: self.state(t),
+            can_revert: store.snapshots.contains_key(t.id),
+            favorite: store.favorites.contains(t.id),
+        }
     }
 
     /// Requisitos do catálogo + o que só dá pra saber perguntando ao Windows (a opção

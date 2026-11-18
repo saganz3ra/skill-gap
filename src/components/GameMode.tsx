@@ -316,7 +316,7 @@ export function TimerCard() {
   const [report, setReport] = useState<TimerReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const f = (n: number | null | undefined, d = 2) => (n === null || n === undefined ? "—" : `${n.toFixed(d)} ms`);
+  const f = (n: number | null | undefined, d = 2) => (n === null || n === undefined ? "n/d" : `${n.toFixed(d)} ms`);
 
   async function measure() {
     setBusy(true);

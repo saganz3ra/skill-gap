@@ -108,31 +108,20 @@ export function Correcoes() {
           const report = reports[fix.id];
           const isRunning = running === fix.id;
           return (
-            <article key={fix.id} className="card" aria-labelledby={`fix-${fix.id}`}>
-              <div className="card-head" style={{ alignItems: "flex-start" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
-                  <h2 id={`fix-${fix.id}`} className="card-title">
-                    {fix.name}
-                  </h2>
-                  <p className="tweak-desc">{fix.description}</p>
-                  <p className="small" style={{ margin: 0 }}>
-                    <span className="muted">Quando usar:</span> {fix.when}
-                  </p>
-                  <div className="tweak-badges">
-                    <span className="badge badge-idle">{fix.duration}</span>
-                    {fix.requiresAdmin && <span className="badge badge-idle" title="O Windows pede permissão de administrador na hora de aplicar">Pede permissão</span>}
-                    {fix.restart === "reboot" && <span className="badge badge-info">Reiniciar o PC</span>}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  style={{ flexShrink: 0 }}
-                  disabled={running !== null || (fix.id === "network_reset" && (net.data?.needsReboot || saved.length > 0))}
-                  onClick={() => void run(fix)}
-                >
-                  {isRunning ? "Rodando…" : confirming === fix.id ? "Confirmar" : "Executar"}
-                </button>
+            <article key={fix.id} className="tweak-card" aria-labelledby={`fix-${fix.id}`}>
+              <div className="tweak-head">
+                <h2 id={`fix-${fix.id}`} className="tweak-name">
+                  {fix.name}
+                </h2>
+              </div>
+              <p className="tweak-desc">{fix.description}</p>
+              <p className="small" style={{ margin: 0 }}>
+                <span className="muted">Quando usar:</span> {fix.when}
+              </p>
+              <div className="tweak-badges">
+                <span className="badge badge-idle">{fix.duration}</span>
+                {fix.requiresAdmin && <span className="badge badge-idle" title="O Windows pede permissão de administrador na hora de aplicar">Pede permissão</span>}
+                {fix.restart === "reboot" && <span className="badge badge-info">Reiniciar o PC</span>}
               </div>
 
               {fix.id === "network_reset" && (net.data?.current.length ?? 0) > 0 && !net.data?.needsReboot && (
@@ -179,6 +168,18 @@ export function Correcoes() {
                   {report.ok ? <RestartNotice restart={report.restart} /> : null}
                 </div>
               )}
+
+              <div className="tweak-foot" style={{ justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              style={{ flexShrink: 0 }}
+              disabled={running !== null || (fix.id === "network_reset" && (net.data?.needsReboot || saved.length > 0))}
+              onClick={() => void run(fix)}
+            >
+              {isRunning ? "Rodando…" : confirming === fix.id ? "Confirmar" : "Executar"}
+            </button>
+              </div>
             </article>
           );
         })}

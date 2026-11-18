@@ -118,7 +118,7 @@ export function Perfis() {
               <div>
                 <dt>Monitor principal</dt>
                 <dd>
-                  {sys.data.displayHz ? `${sys.data.displayHz} Hz` : "—"}
+                  {sys.data.displayHz ? `${sys.data.displayHz} Hz` : "n/d"}
                   {sys.data.maxDisplayHz && sys.data.displayHz && sys.data.maxDisplayHz > sys.data.displayHz && (
                     <span className="muted small"> (aceita até {sys.data.maxDisplayHz} Hz)</span>
                   )}

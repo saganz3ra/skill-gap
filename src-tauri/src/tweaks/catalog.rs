@@ -807,7 +807,7 @@ pub static TWEAKS: &[Tweak] = &[
     tw(
         "fast_kill_hung",
         "Fechar rápido programa travado",
-        "No desligar e em janelas que não respondem, o Windows espera 2 s em vez de 5–20 s.",
+        "No desligar e em janelas que não respondem, o Windows espera 2 s em vez de 5 a 20 s.",
         "Desligar fica mais rápido e travamentos se resolvem antes.",
         Category::Geral,
         Impact::Medium,

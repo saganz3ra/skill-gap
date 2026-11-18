@@ -4,12 +4,12 @@
 //! O que o perfil faz, e como:
 //! - **Prioridade alta do jogo** via registro (IFEO `PerfOptions\CpuPriorityClass`):
 //!   o próprio Windows aplica quando o jogo inicia. O Skill Gap NUNCA abre o processo
-//!   do jogo — é isso que anticheats vigiam.
+//!   do jogo: é isso que anticheats vigiam.
 //! - **Apps em segundo plano** (navegador, Discord, launchers) vão para "abaixo do
 //!   normal". Esses processos são abertos, mas nenhum é o jogo, antivírus, anticheat
 //!   ou do Windows (lista `PROTECTED`).
 //! - **Serviços** WSearch (indexação) e SysMain (pré-carregamento) param durante a
-//!   partida e voltam depois — só se estavam rodando.
+//!   partida e voltam depois, só se estavam rodando.
 //! - **Plano de energia** Alto desempenho durante a partida.
 //!
 //! "Anota antes de mexer": a sessão é gravada em disco antes de cada mudança. Se o PC

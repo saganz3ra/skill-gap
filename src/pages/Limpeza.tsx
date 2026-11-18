@@ -126,7 +126,7 @@ export function Limpeza() {
         <div className="card-head" style={{ padding: "8px 0" }}>
           <span className="stat-label">{loading ? "Analisando…" : "Selecionado"}</span>
           <span className="mono" style={{ fontWeight: 500 }}>
-            {loading ? "—" : formatBytes(selectedBytes)}
+            {loading ? "…" : formatBytes(selectedBytes)}
           </span>
         </div>
         {(scans ?? []).map((scan) => (

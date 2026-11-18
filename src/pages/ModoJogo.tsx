@@ -184,19 +184,18 @@ export function ModoJogo() {
               </p>
             )}
           </section>
-
+          {watch.data && <TimerCard />}
         </div>
       </div>
 
       {watch.data && (
         <div className="row-wrap">
-          <div style={{ flex: "1 1 380px", minWidth: 0 }}>
+          <div style={{ flex: "1 1 380px", minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
             <GameListCard status={watch.data} saving={saving} save={(c) => void save(c)} />
             <SuggestionsCard status={watch.data} saving={saving} save={(c) => void save(c)} />
           </div>
-          <div style={{ flex: "1 1 380px", minWidth: 0 }}>
+          <div style={{ flex: "1 1 380px", minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
             <OptionsCard status={watch.data} saving={saving} save={(c) => void save(c)} />
-            <TimerCard />
           </div>
         </div>
       )}

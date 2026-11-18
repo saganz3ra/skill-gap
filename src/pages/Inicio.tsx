@@ -130,17 +130,17 @@ export function Inicio() {
       <section className="stat-grid" aria-label="Resumo">
         <Link to="/inicializacao" className="stat-card">
           <span className="stat-label">Inicialização</span>
-          <span className="stat-value">{activeStartup ?? "—"} ativos</span>
+          <span className="stat-value">{activeStartup === undefined ? "…" : `${activeStartup} ativos`}</span>
           <span className="stat-link">Revisar programas →</span>
         </Link>
         <Link to="/desempenho" className="stat-card">
           <span className="stat-label">Plano de energia</span>
-          <span className="stat-value">{planName ?? "—"}</span>
+          <span className="stat-value">{planName ?? "…"}</span>
           <span className="stat-link">Alterar plano →</span>
         </Link>
         <Link to="/limpeza" className="stat-card">
           <span className="stat-label">Espaço recuperável</span>
-          <span className="stat-value">{reclaimable !== undefined ? formatBytes(reclaimable) : "—"}</span>
+          <span className="stat-value">{reclaimable !== undefined ? formatBytes(reclaimable) : "…"}</span>
           <span className="stat-link">Revisar limpeza →</span>
         </Link>
       </section>
@@ -158,7 +158,7 @@ export function Inicio() {
             )}
           </div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-            <span className="stat-value">{tweaks.data ? `${pct}%` : "—"}</span>
+            <span className="stat-value">{tweaks.data ? `${pct}%` : "…"}</span>
             <span className="muted small">
               {done} de {target.length} ajustes recomendados ativos
             </span>
@@ -219,7 +219,7 @@ export function Inicio() {
               </div>
               <div>
                 <dt>Disco do sistema</dt>
-                <dd>{sys.data.systemDisk === "ssd" ? "SSD" : sys.data.systemDisk === "hdd" ? "HD mecânico" : "—"}</dd>
+                <dd>{sys.data.systemDisk === "ssd" ? "SSD" : sys.data.systemDisk === "hdd" ? "HD mecânico" : "desconhecido"}</dd>
               </div>
               <div>
                 <dt>Executando como</dt>
@@ -228,7 +228,7 @@ export function Inicio() {
               <div>
                 <dt>Ajustes ativos</dt>
                 <dd>
-                  {tweaks.data?.filter((t) => t.state === "active").length ?? "—"} de {tweaks.data?.length ?? "—"}
+                  {tweaks.data?.filter((t) => t.state === "active").length ?? "…"} de {tweaks.data?.length ?? "…"}
                 </dd>
               </div>
             </dl>

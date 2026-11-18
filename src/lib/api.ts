@@ -536,6 +536,7 @@ export const api = {
   onGameSession: (cb: (s: WatchStatus) => void): Promise<UnlistenFn> =>
     listen<WatchStatus>("game-session", (e) => cb(e.payload)),
   tweaksList: () => invoke<TweakView[]>("tweaks_list"),
+  tweakStatus: (id: string) => invoke<Pick<TweakView, "state" | "canRevert">>("tweak_status", { id }),
   tweakApply: (id: string, confirmed = false) => invoke<void>("tweak_apply", { id, confirmed }),
   tweakRevert: (id: string) => invoke<void>("tweak_revert", { id }),
   tweaksRevertAll: () => invoke<BatchReport>("tweaks_revert_all"),
