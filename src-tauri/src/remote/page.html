@@ -22,16 +22,16 @@
 <body>
 <header><span>Skill Gap</span> · segunda tela</header>
 <main>
-  <div class="t wide"><div class="l">FPS</div><div class="v" id="fps">—</div><div class="s" id="ft">abra um jogo da lista do Modo Jogo</div></div>
-  <div class="t"><div class="l">CPU</div><div class="v" id="cpu">—</div><div class="s" id="ct"></div></div>
-  <div class="t"><div class="l">GPU</div><div class="v" id="gpu">—</div><div class="s" id="gt"></div></div>
-  <div class="t"><div class="l">Ping</div><div class="v" id="ping">—</div><div class="s" id="jit"></div></div>
-  <div class="t"><div class="l">RAM</div><div class="v" id="ram">—</div><div class="s" id="ramt"></div></div>
+  <div class="t wide"><div class="l">FPS</div><div class="v" id="fps">…</div><div class="s" id="ft">abra um jogo da lista do Modo Jogo</div></div>
+  <div class="t"><div class="l">CPU</div><div class="v" id="cpu">…</div><div class="s" id="ct"></div></div>
+  <div class="t"><div class="l">GPU</div><div class="v" id="gpu">…</div><div class="s" id="gt"></div></div>
+  <div class="t"><div class="l">Ping</div><div class="v" id="ping">…</div><div class="s" id="jit"></div></div>
+  <div class="t"><div class="l">RAM</div><div class="v" id="ram">…</div><div class="s" id="ramt"></div></div>
 </main>
 <div id="st">Conectando…</div>
 <script>
   const $ = (id) => document.getElementById(id);
-  const n = (v, d = 0) => (v === null || v === undefined ? "—" : Number(v).toFixed(d));
+  const n = (v, d = 0) => (v === null || v === undefined ? "…" : Number(v).toFixed(d));
   const es = new EventSource("events");
   es.onopen = () => ($("st").textContent = "Ao vivo · 1 leitura por segundo");
   es.onerror = () => ($("st").textContent = "Sem conexão com o PC (a segunda tela foi desligada?)");
@@ -44,11 +44,11 @@
     }
     $("cpu").textContent = n(s.cpu) + "%";
     $("ct").textContent = s.cpuTemp ? "~" + n(s.cpuTemp) + " °C (aproximada)" : "";
-    $("gpu").textContent = s.gpu === null || s.gpu === undefined ? "—" : n(s.gpu) + "%";
+    $("gpu").textContent = s.gpu === null || s.gpu === undefined ? "n/d" : n(s.gpu) + "%";
     $("gt").textContent = d.gpuTemp ? n(d.gpuTemp) + " °C" : "";
-    $("ping").textContent = d.ping && d.ping.lastMs !== null ? n(d.ping.lastMs) + " ms" : "—";
+    $("ping").textContent = d.ping && d.ping.lastMs !== null ? n(d.ping.lastMs) + " ms" : "…";
     $("jit").textContent = d.ping ? "jitter " + n(d.ping.jitterMs, 1) + " ms · perda " + n(d.ping.lossPct) + "%" : "";
-    $("ram").textContent = s.ramTotal ? n((s.ramUsed / s.ramTotal) * 100) + "%" : "—";
+    $("ram").textContent = s.ramTotal ? n((s.ramUsed / s.ramTotal) * 100) + "%" : "…";
     $("ramt").textContent = s.ramUsed ? n(s.ramUsed / 1073741824, 1) + " GB" : "";
   };
 </script>

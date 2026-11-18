@@ -164,6 +164,24 @@ async fn tweaks_list(app: tauri::AppHandle) -> AppResult<Vec<tweaks::TweakView>>
     blocking(move || Ok(engine(&app).list(&sys_profile(&app, false)))).await
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TweakStatus {
+    state: tweaks::TweakState,
+    can_revert: bool,
+}
+
+/// Estado de um ajuste só: depois de aplicar/desfazer, a tela atualiza o cartão
+/// sem reler os ~95 ajustes.
+#[tauri::command]
+async fn tweak_status(app: tauri::AppHandle, id: String) -> AppResult<TweakStatus> {
+    blocking(move || {
+        let (state, can_revert) = engine(&app).status_of(&id)?;
+        Ok(TweakStatus { state, can_revert })
+    })
+    .await
+}
+
 /// `confirmed`: o usuário confirmou um ajuste de risco alto (conferido no backend).
 #[tauri::command]
 async fn tweak_apply(app: tauri::AppHandle, id: String, confirmed: Option<bool>) -> AppResult<()> {
@@ -993,6 +1011,7 @@ pub fn run() {
             list_running_processes,
             tweaks_list,
             tweak_apply,
+            tweak_status,
             tweak_revert,
             tweaks_revert_all,
             tweak_set_favorite,

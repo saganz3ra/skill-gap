@@ -160,7 +160,7 @@ pub fn hiberfil_present() -> Option<bool> {
 
 #[cfg(not(windows))]
 pub fn read_profile() -> SystemProfile {
-    SystemProfile { windows: "—".into(), build: 0, is_laptop: false, ram_gb: 0, system_disk: DiskKind::Unknown }
+    SystemProfile { windows: "desconhecido".into(), build: 0, is_laptop: false, ram_gb: 0, system_disk: DiskKind::Unknown }
 }
 
 #[cfg(not(windows))]

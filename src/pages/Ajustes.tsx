@@ -50,7 +50,9 @@ export function Ajustes() {
       await (on ? api.tweakApply(t.id, confirmed) : api.tweakRevert(t.id));
       // Guarda a reinicialização mais pesada pendente.
       setRestart((r) => (order(t.restart) > order(r) ? t.restart : r));
-      await reload();
+      // Só o cartão mexido: reler a lista inteira abre dezenas de processos no Windows.
+      const st = await api.tweakStatus(t.id);
+      setData((list) => list?.map((x) => (x.id === t.id ? { ...x, ...st } : x)));
     } catch (e) {
       setMessage(`${t.name}: ${friendlyError(e)}`);
     } finally {
@@ -228,7 +230,7 @@ function TweakCard({
   const detailsId = `det-${t.id}`;
 
   return (
-    <article className={`tweak-card${on ? " tweak-on" : ""}`}>
+    <article className="tweak-card">
       <div className="tweak-head">
         <h2 className="tweak-name">{t.name}</h2>
         <button
