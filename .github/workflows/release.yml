@@ -33,12 +33,12 @@ jobs:
             $tag = "v$version"
             gh api "repos/${{ github.repository }}/git/ref/tags/$tag" 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) {
-              Write-Error "A tag $tag já existe: suba a versão no tauri.conf.json, package.json, Cargo.toml e CHANGELOG.json"
+              Write-Error "A tag ${tag} já existe: suba a versão no tauri.conf.json, package.json, Cargo.toml e CHANGELOG.json"
               exit 1
             }
             $existing = gh api "repos/${{ github.repository }}/releases" --jq ".[].tag_name" | Where-Object { $_ -eq $tag }
             if ($existing) {
-              Write-Error "Já existe uma Release (talvez rascunho) para $tag: apague-a antes"
+              Write-Error "Já existe uma Release (talvez rascunho) para ${tag}: apague-a antes"
               exit 1
             }
           } else {
