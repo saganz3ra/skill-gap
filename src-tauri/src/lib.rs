@@ -69,9 +69,30 @@ async fn set_power_plan(plan: power::PowerPlan) -> AppResult<()> {
 }
 
 #[tauri::command]
-async fn scan_cleanup() -> AppResult<Vec<cleanup::CategoryScan>> {
-    blocking(|| Ok(cleanup::scan())).await
+async fn scan_cleanup(app: tauri::AppHandle, fresh: Option<bool>) -> AppResult<Vec<cleanup::CategoryScan>> {
+    blocking(move || {
+        let cache = app.state::<ScanCache>();
+        // A trava fica presa durante o escaneamento: o Início e a Limpeza abrindo juntos
+        // escaneiam uma vez só.
+        let mut slot = cache.0.lock().unwrap_or_else(|e| e.into_inner());
+        if !fresh.unwrap_or(false) {
+            if let Some((at, scans)) = slot.as_ref() {
+                if at.elapsed() < SCAN_TTL {
+                    return Ok(scans.clone());
+                }
+            }
+        }
+        let scans = cleanup::scan();
+        *slot = Some((std::time::Instant::now(), scans.clone()));
+        Ok(scans)
+    })
+    .await
 }
+
+/// Escanear as pastas temporárias leva segundos; o resultado vale por um minuto
+/// (o Início e a tela de Limpeza dividem). Limpar ou "Escanear de novo" refaz na hora.
+struct ScanCache(std::sync::Mutex<Option<(std::time::Instant, Vec<cleanup::CategoryScan>)>>);
+const SCAN_TTL: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// Emite o evento "cleanup-progress" ao terminar cada categoria, pra interface
 /// mostrar o andamento sem esperar a limpeza inteira acabar.
@@ -101,7 +122,10 @@ async fn run_cleanup(
                 let _ = app.emit("cleanup-progress", result);
             },
         ))
-        .inspect(|report: &cleanup::CleanupReport| app.state::<diagnosis::BaselineState>().add_cleaned(report.freed_bytes))
+        .inspect(|report: &cleanup::CleanupReport| {
+            app.state::<diagnosis::BaselineState>().add_cleaned(report.freed_bytes);
+            app.state::<ScanCache>().0.lock().unwrap_or_else(|e| e.into_inner()).take();
+        })
     })
     .await
 }
@@ -987,6 +1011,7 @@ pub fn run() {
         .manage(Frames::default())
         .manage(RemoteSlot(std::sync::Mutex::new(None)))
         .manage(Sensors::default())
+        .manage(ScanCache(std::sync::Mutex::new(None)))
         .manage(FixLock(AtomicBool::new(false)))
         .setup(|app| {
             // Configs e diários em %APPDATA%\app.skillgap.desktop\

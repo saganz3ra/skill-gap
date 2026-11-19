@@ -17,7 +17,11 @@ import { Notice, PageHeader } from "../components/ui";
 type Phase = "idle" | "confirm" | "running" | "done";
 
 export function Limpeza() {
-  const { data: scans, error, loading, reload } = useResource(api.scanCleanup);
+  // Ao abrir, aceita o escaneamento guardado (vale 1 min, dividido com o Início);
+  // "Escanear de novo" pede um novo de verdade.
+  const fresh = useRef(false);
+  const loadScans = useRef(() => api.scanCleanup(fresh.current)).current;
+  const { data: scans, error, loading, reload } = useResource(loadScans);
   const [selected, setSelected] = useState<Set<CleanupCategory>>(new Set());
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<Partial<Record<CleanupCategory, CategoryResult>>>({});
@@ -98,6 +102,7 @@ export function Limpeza() {
                 setProgress({});
                 setReport(null);
                 setPhase("idle");
+                fresh.current = true;
                 void reload();
               }}
               disabled={busy}

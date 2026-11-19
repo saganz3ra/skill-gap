@@ -18,11 +18,12 @@ pub mod elevated;
 #[cfg(windows)]
 pub mod windows;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -133,6 +134,39 @@ pub struct TweakEngine {
     sys: Box<dyn Sys>,
     path: PathBuf,
     store: Mutex<Store>,
+    /// Estado + suporte de todos os ajustes, reaproveitado entre telas (ver `evaluate_all`).
+    evals: Mutex<Option<Evals>>,
+    /// Sobe a cada escrita: avaliação feita antes dela vira lixo.
+    generation: AtomicU64,
+    eval_ttl: Duration,
+}
+
+/// Estado e suporte de um ajuste. Os dois exigem ler o Windows (às vezes abrindo
+/// PowerShell), por isso a lista inteira é avaliada de uma vez e reaproveitada.
+#[derive(Clone, Copy)]
+struct Eval {
+    state: TweakState,
+    supported: bool,
+}
+
+struct Evals {
+    generation: u64,
+    at: Instant,
+    map: Arc<HashMap<&'static str, Eval>>,
+}
+
+/// Quanto tempo uma avaliação completa vale. O Início abre a lista de ajustes e o
+/// Guardian ao mesmo tempo; com isso, o Windows é lido uma vez para os dois.
+/// Escritas do próprio app invalidam na hora; mudança feita por fora (o Windows
+/// desfazendo algo) aparece em até 10 s.
+pub const EVAL_TTL: Duration = Duration::from_secs(10);
+
+/// Ao sair de escopo (sucesso, erro ou pânico), marca que o sistema mudou.
+struct Changed<'a>(&'a AtomicU64);
+impl Drop for Changed<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_add(1, Ordering::AcqRel);
+    }
 }
 
 fn now() -> u64 {
@@ -156,6 +190,15 @@ fn find(id: &str) -> AppResult<&'static Tweak> {
     catalog::find(id).ok_or_else(|| AppError::NotFound(format!("ajuste {id}")))
 }
 
+/// Requisitos do catálogo + "o Windows tem o que este ajuste mexe" (já avaliado).
+fn gate_with(t: &Tweak, sys: &SystemProfile, supported: bool) -> Gate {
+    match catalog::gate(t, sys) {
+        Gate::Unavailable(r) => Gate::Unavailable(r),
+        other if supported => other,
+        _ => Gate::Unavailable(unsupported_reason(t)),
+    }
+}
+
 impl TweakEngine {
     /// Diário corrompido não impede o app de abrir: começa vazio.
     pub fn load(sys: Box<dyn Sys>, path: PathBuf) -> Self {
@@ -163,7 +206,50 @@ impl TweakEngine {
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default();
-        Self { sys, path, store: Mutex::new(store) }
+        Self { sys, path, store: Mutex::new(store), evals: Mutex::new(None), generation: AtomicU64::new(0), eval_ttl: EVAL_TTL }
+    }
+
+    /// Avalia todos os ajustes uma vez (em paralelo, numa rodada de leitura) e guarda
+    /// por `eval_ttl`. Segurar a trava durante o cálculo é de propósito: quem chega
+    /// no meio espera e reaproveita, em vez de reler o Windows em dobro.
+    fn evaluate_all(&self) -> Arc<HashMap<&'static str, Eval>> {
+        let mut slot = self.evals.lock().unwrap_or_else(|e| e.into_inner());
+        let generation = self.generation.load(Ordering::Acquire);
+        if let Some(e) = slot.as_ref() {
+            if e.generation == generation && e.at.elapsed() < self.eval_ttl {
+                return Arc::clone(&e.map);
+            }
+        }
+        const WORKERS: usize = 8;
+        let chunk = TWEAKS.len().div_ceil(WORKERS).max(1);
+        let map: HashMap<&'static str, Eval> = readcache::scope(|| {
+            std::thread::scope(|s| {
+                let handles: Vec<_> = TWEAKS
+                    .chunks(chunk)
+                    .map(|part| {
+                        s.spawn(|| {
+                            part.iter()
+                                .map(|t| {
+                                    let supported = t.ops.iter().all(|op| ops::supported(self.sys.as_ref(), op));
+                                    (t.id, Eval { state: self.state(t), supported })
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                    })
+                    .collect();
+                handles.into_iter().flat_map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).collect()
+            })
+        });
+        let map = Arc::new(map);
+        // Guarda com a geração de ANTES do cálculo: se algo foi escrito durante,
+        // a próxima chamada recalcula.
+        *slot = Some(Evals { generation, at: Instant::now(), map: Arc::clone(&map) });
+        map
+    }
+
+    /// Para testes e para "Verificar de novo": esquece a avaliação guardada.
+    pub fn invalidate(&self) {
+        self.generation.fetch_add(1, Ordering::AcqRel);
     }
 
     fn lock(&self) -> MutexGuard<'_, Store> {
@@ -202,23 +288,15 @@ impl TweakEngine {
     }
 
     pub fn list(&self, sys: &SystemProfile) -> Vec<TweakView> {
+        let evals = self.evaluate_all();
         let store = self.lock().clone();
-        // Cada ajuste pergunta ao Windows (às vezes abrindo PowerShell): em paralelo,
-        // e numa rodada de leitura, para cada valor ser lido uma vez só.
-        const WORKERS: usize = 8;
-        let chunk = TWEAKS.len().div_ceil(WORKERS).max(1);
-        readcache::scope(|| {
-            std::thread::scope(|s| {
-                let handles: Vec<_> = TWEAKS
-                    .chunks(chunk)
-                    .map(|part| s.spawn(|| part.iter().map(|t| self.view(t, sys, &store)).collect::<Vec<_>>()))
-                    .collect();
-                handles.into_iter().flat_map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).collect()
-            })
-        })
+        TWEAKS
+            .iter()
+            .filter_map(|t| evals.get(t.id).map(|ev| self.view(t, sys, &store, *ev)))
+            .collect()
     }
 
-    fn view(&self, t: &Tweak, sys: &SystemProfile, store: &Store) -> TweakView {
+    fn view(&self, t: &Tweak, sys: &SystemProfile, store: &Store, ev: Eval) -> TweakView {
         TweakView {
             id: t.id,
             name: t.name,
@@ -231,8 +309,8 @@ impl TweakEngine {
             risk: t.risk,
             breaks: t.breaks,
             heats: t.heats,
-            gate: self.gate(t, sys),
-            state: self.state(t),
+            gate: gate_with(t, sys, ev.supported),
+            state: ev.state,
             can_revert: store.snapshots.contains_key(t.id),
             favorite: store.favorites.contains(t.id),
         }
@@ -241,11 +319,10 @@ impl TweakEngine {
     /// Requisitos do catálogo + o que só dá pra saber perguntando ao Windows (a opção
     /// de energia existe? a tarefa existe? o app está instalado?).
     fn gate(&self, t: &Tweak, sys: &SystemProfile) -> Gate {
-        match catalog::gate(t, sys) {
-            Gate::Unavailable(r) => Gate::Unavailable(r),
-            other if t.ops.iter().all(|op| ops::supported(self.sys.as_ref(), op)) => other,
-            _ => Gate::Unavailable(unsupported_reason(t)),
+        if let Gate::Unavailable(r) = catalog::gate(t, sys) {
+            return Gate::Unavailable(r);
         }
+        gate_with(t, sys, t.ops.iter().all(|op| ops::supported(self.sys.as_ref(), op)))
     }
 
     /// Aplicar pedido pelo usuário: confere requisitos e confirmação de risco alto ANTES.
@@ -261,6 +338,7 @@ impl TweakEngine {
     /// Núcleo do aplicar, sem as checagens de requisito (usado depois delas).
     pub fn apply(&self, id: &str) -> AppResult<()> {
         let tweak = find(id)?;
+        let _changed = Changed(&self.generation);
         if self.state(tweak) == TweakState::Active {
             return Ok(());
         }
@@ -300,6 +378,7 @@ impl TweakEngine {
 
     pub fn revert(&self, id: &str) -> AppResult<()> {
         let tweak = find(id)?;
+        let _changed = Changed(&self.generation);
         let mut store = self.lock();
         let snap = store
             .snapshots
@@ -327,10 +406,14 @@ impl TweakEngine {
     /// atualização, política, outro programa). Lido do estado real.
     pub fn undone_by_windows(&self) -> Vec<&'static str> {
         let store = self.lock().clone();
+        if store.snapshots.is_empty() {
+            return Vec::new(); // nada aplicado pelo app: nem lê o Windows
+        }
+        let evals = self.evaluate_all();
         TWEAKS
             .iter()
             .filter(|t| store.snapshots.contains_key(t.id))
-            .filter(|t| matches!(self.state(t), TweakState::Inactive | TweakState::Partial))
+            .filter(|t| evals.get(t.id).is_some_and(|e| matches!(e.state, TweakState::Inactive | TweakState::Partial)))
             .map(|t| t.id)
             .collect()
     }
@@ -709,12 +792,32 @@ mod tests {
     }
 
     #[test]
+    fn avaliacao_compartilhada_ve_escrita_do_app_na_hora() {
+        let (e, _, fake) = engine("evals");
+        assert_eq!(view(&e, "game_mode").state, TweakState::Inactive);
+        // Mudança por fora: dentro da validade, a tela continua com a avaliação guardada…
+        fake.set_dword(Hive::Hkcu, r"Software\Microsoft\GameBar", "AutoGameModeEnabled", Some(1)).unwrap();
+        assert_eq!(view(&e, "game_mode").state, TweakState::Inactive);
+        // …mas o cartão (status_of) sempre lê o Windows.
+        assert_eq!(e.status_of("game_mode").unwrap().0, TweakState::Active);
+        e.invalidate();
+        assert_eq!(view(&e, "game_mode").state, TweakState::Active);
+
+        // Escrita do próprio app invalida na hora, sem esperar a validade.
+        e.apply("ad_id_off").unwrap();
+        assert_eq!(view(&e, "ad_id_off").state, TweakState::Active);
+        e.revert("ad_id_off").unwrap();
+        assert_ne!(view(&e, "ad_id_off").state, TweakState::Active);
+    }
+
+    #[test]
     fn guardiao_ve_o_que_o_windows_desfez() {
         let (e, _, fake) = engine("guardiao");
         e.apply("game_mode").unwrap();
         assert!(e.undone_by_windows().is_empty());
         // Uma grande atualização volta o valor de fábrica:
         fake.set_dword(Hive::Hkcu, r"Software\Microsoft\GameBar", "AutoGameModeEnabled", Some(0)).unwrap();
+        e.invalidate(); // mudança feita por fora aparece quando a avaliação vence
         assert_eq!(e.undone_by_windows(), ["game_mode"]);
         e.apply_checked("game_mode", &desktop(), true).unwrap();
         assert!(e.undone_by_windows().is_empty());

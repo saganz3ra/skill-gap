@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import QRCode from "qrcode";
 
 import { api, errorMessage, heatLevel, type HeatKind, type PresentMonStatus, type RemoteInfo, type Telemetry } from "../lib/api";
 import { Switch } from "./ui";
@@ -72,7 +71,8 @@ export function OverlayCard() {
   };
   useEffect(refresh, []);
   useEffect(() => {
-    if (remote) void QRCode.toDataURL(remote.url, { margin: 1, width: 180 }).then(setQr);
+    // A biblioteca do QR só é baixada quando a segunda tela é ligada.
+    if (remote) void import("qrcode").then((m) => m.default.toDataURL(remote.url, { margin: 1, width: 180 })).then(setQr);
     else setQr(null);
   }, [remote]);
 

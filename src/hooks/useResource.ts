@@ -9,8 +9,12 @@ interface Resource<T> {
   setData: React.Dispatch<React.SetStateAction<T | undefined>>;
 }
 
-/** Carrega um dado assíncrono uma vez ao montar, com recarga manual. */
-export function useResource<T>(load: () => Promise<T>): Resource<T> {
+/**
+ * Carrega um dado assíncrono uma vez ao montar, com recarga manual.
+ * `delayMs`: começa só depois desse tempo, para não disputar a abertura da tela
+ * com o que aparece primeiro.
+ */
+export function useResource<T>(load: () => Promise<T>, delayMs = 0): Resource<T> {
   const [data, setData] = useState<T>();
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
@@ -28,8 +32,13 @@ export function useResource<T>(load: () => Promise<T>): Resource<T> {
   }, [load]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    if (delayMs <= 0) {
+      void reload();
+      return;
+    }
+    const id = window.setTimeout(() => void reload(), delayMs);
+    return () => window.clearTimeout(id);
+  }, [reload, delayMs]);
 
   return { data, error, loading, reload, setData };
 }
