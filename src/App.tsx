@@ -1,3 +1,4 @@
+import { lazy } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -5,19 +6,22 @@ import { ThemeProvider } from "./hooks/theme";
 import { OverlayWindow } from "./components/Overlay";
 import { Layout } from "./components/Layout";
 import { Inicio } from "./pages/Inicio";
-import { Limpeza } from "./pages/Limpeza";
-import { Inicializacao } from "./pages/Inicializacao";
-import { Desempenho } from "./pages/Desempenho";
-import { ModoJogo } from "./pages/ModoJogo";
-import { Ajustes } from "./pages/Ajustes";
-import { Perfis } from "./pages/Perfis";
-import { Monitor } from "./pages/Monitor";
-import { Drivers } from "./pages/Drivers";
-import { Correcoes } from "./pages/Correcoes";
-import { Mouse } from "./pages/Mouse";
-import { Novidades } from "./pages/Novidades";
-import { Diagnostico } from "./pages/Diagnostico";
-import { Hardware } from "./pages/Hardware";
+
+// O Início abre junto com o app; as outras telas só carregam quando abertas
+// (arquivos separados no build), o que deixa a abertura mais leve.
+const Limpeza = lazy(() => import("./pages/Limpeza").then((m) => ({ default: m.Limpeza })));
+const Inicializacao = lazy(() => import("./pages/Inicializacao").then((m) => ({ default: m.Inicializacao })));
+const Desempenho = lazy(() => import("./pages/Desempenho").then((m) => ({ default: m.Desempenho })));
+const ModoJogo = lazy(() => import("./pages/ModoJogo").then((m) => ({ default: m.ModoJogo })));
+const Ajustes = lazy(() => import("./pages/Ajustes").then((m) => ({ default: m.Ajustes })));
+const Perfis = lazy(() => import("./pages/Perfis").then((m) => ({ default: m.Perfis })));
+const Monitor = lazy(() => import("./pages/Monitor").then((m) => ({ default: m.Monitor })));
+const Drivers = lazy(() => import("./pages/Drivers").then((m) => ({ default: m.Drivers })));
+const Correcoes = lazy(() => import("./pages/Correcoes").then((m) => ({ default: m.Correcoes })));
+const Mouse = lazy(() => import("./pages/Mouse").then((m) => ({ default: m.Mouse })));
+const Novidades = lazy(() => import("./pages/Novidades").then((m) => ({ default: m.Novidades })));
+const Diagnostico = lazy(() => import("./pages/Diagnostico").then((m) => ({ default: m.Diagnostico })));
+const Hardware = lazy(() => import("./pages/Hardware").then((m) => ({ default: m.Hardware })));
 
 // MemoryRouter: num app desktop não existe barra de endereço, então a rota fica só
 // em memória. Evita 404 ao recarregar uma rota interna no build de produção.

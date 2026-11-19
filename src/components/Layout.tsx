@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { Tour } from "./Tour";
 import { api, NEWS_SEEN_EVENT, type ElevationStatus, type WhatsNew } from "../lib/api";
@@ -96,7 +96,9 @@ export function Layout() {
         <div className="bg-layer bg-grid" aria-hidden="true" />
         <div className="bg-layer bg-dots" aria-hidden="true" />
         <div className="content">
-          <Outlet />
+          <Suspense fallback={<p className="muted small">Carregando…</p>}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
       <Tour />
@@ -115,10 +117,14 @@ function AdminChip() {
         .then((s) => alive && setStatus(s))
         .catch(() => {});
     tick();
-    const id = window.setInterval(tick, 3000);
+    // O auxiliar abre/fecha por ação do usuário: 10 s basta, e a volta do foco
+    // para a janela atualiza na hora.
+    const id = window.setInterval(tick, 10_000);
+    window.addEventListener("focus", tick);
     return () => {
       alive = false;
       window.clearInterval(id);
+      window.removeEventListener("focus", tick);
     };
   }, []);
   if (!status) return null;

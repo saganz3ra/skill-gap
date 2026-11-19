@@ -549,7 +549,8 @@ export const api = {
     invoke<void>("set_startup_item_enabled", { id, enabled }),
   getPowerPlan: () => invoke<ActivePlan>("get_power_plan"),
   setPowerPlan: (plan: PowerPlan) => invoke<void>("set_power_plan", { plan }),
-  scanCleanup: () => invoke<CategoryScan[]>("scan_cleanup"),
+  /** `fresh`: ignora o resultado guardado (vale 1 min) e escaneia de novo. */
+  scanCleanup: (fresh = false) => invoke<CategoryScan[]>("scan_cleanup", { fresh }),
   runCleanup: (categories: CleanupCategory[]) => invoke<CleanupReport>("run_cleanup", { categories }),
   gamingDiagnose: () => invoke<GamingReport>("gaming_diagnose"),
   gamingFix: (id: CheckId) => invoke<void>("gaming_fix", { id }),

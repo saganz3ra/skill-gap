@@ -14,6 +14,14 @@
       {
         "kind": "novo",
         "text": "Guia de como controlar as ventoinhas (BIOS, FanControl ou o painel da placa de vídeo). O Skill Gap não instala driver para isso."
+      },
+      {
+        "kind": "melhoria",
+        "text": "O app abre mais rápido: o Início e o aviso de ajustes desfeitos pelo Windows dividem uma leitura só do sistema, e cada tela carrega só quando é aberta."
+      },
+      {
+        "kind": "melhoria",
+        "text": "O escaneamento da limpeza vale por um minuto e é dividido entre o Início e a tela de Limpeza; “Escanear de novo” sempre refaz."
       }
     ]
   },

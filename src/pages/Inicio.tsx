@@ -8,10 +8,13 @@ import { PageHeader } from "../components/ui";
 import { BatchSummary, friendlyError, RestoreNotice } from "../components/feedback";
 import { ReleaseCard } from "./Novidades";
 
+const scanCached = () => api.scanCleanup(false);
+
 export function Inicio() {
   const startup = useResource(api.listStartupItems);
   const power = useResource(api.getPowerPlan);
-  const cleanup = useResource(api.scanCleanup);
+  // Escanear pastas é o mais lento da tela e só preenche um número: vai por último.
+  const cleanup = useResource(scanCached, 1500);
   const tweaks = useResource(api.tweaksList);
   const profiles = useResource(api.profilesList);
   const sys = useResource(api.systemInfo);
