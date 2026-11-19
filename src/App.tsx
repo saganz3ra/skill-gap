@@ -21,6 +21,7 @@ const Correcoes = lazy(() => import("./pages/Correcoes").then((m) => ({ default:
 const Mouse = lazy(() => import("./pages/Mouse").then((m) => ({ default: m.Mouse })));
 const Novidades = lazy(() => import("./pages/Novidades").then((m) => ({ default: m.Novidades })));
 const Diagnostico = lazy(() => import("./pages/Diagnostico").then((m) => ({ default: m.Diagnostico })));
+const Configuracoes = lazy(() => import("./pages/Configuracoes").then((m) => ({ default: m.Configuracoes })));
 const Hardware = lazy(() => import("./pages/Hardware").then((m) => ({ default: m.Hardware })));
 
 // MemoryRouter: num app desktop não existe barra de endereço, então a rota fica só
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="novidades" element={<Novidades />} />
             <Route path="diagnostico" element={<Diagnostico />} />
             <Route path="hardware" element={<Hardware />} />
+            <Route path="configuracoes" element={<Configuracoes />} />
           </Route>
         </Routes>
       </MemoryRouter>

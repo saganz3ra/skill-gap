@@ -331,6 +331,22 @@ export interface PresentMonStatus {
   capturing: string | null;
 }
 
+export type ShortcutAction =
+  | "open_app"
+  | "toggle_overlay"
+  | "toggle_game_mode"
+  | "toggle_remote"
+  | "open_monitor"
+  | "open_cleanup"
+  | "open_tweaks"
+  | "open_fixes";
+
+export interface SettingsView {
+  settings: { startMinimized: boolean; shortcuts: Partial<Record<ShortcutAction, string>> };
+  autostart: boolean;
+  failed: ShortcutAction[];
+}
+
 export interface RemoteInfo {
   url: string;
   port: number;
@@ -568,6 +584,10 @@ export const api = {
   remoteStop: () => invoke<void>("remote_stop"),
   remoteStatus: () => invoke<RemoteInfo | null>("remote_status"),
   sensorsRead: () => invoke<Sensors>("sensors_read"),
+  settingsGet: () => invoke<SettingsView>("settings_get"),
+  settingsSetAutostart: (enabled: boolean) => invoke<SettingsView>("settings_set_autostart", { enabled }),
+  settingsSetStartMinimized: (enabled: boolean) => invoke<SettingsView>("settings_set_start_minimized", { enabled }),
+  settingsSetShortcut: (action: ShortcutAction, accel: string | null) => invoke<SettingsView>("settings_set_shortcut", { action, accel }),
   /** [dispositivos, InstanceIds com valor anotado pelo app] */
   hwMsiList: () => invoke<[MsiDevice[], string[]]>("hw_msi_list"),
   hwMsiSet: (instanceId: string, enabled: boolean) => invoke<void>("hw_msi_set", { instanceId, enabled }),

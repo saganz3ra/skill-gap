@@ -1,9 +1,10 @@
 import { Suspense, useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { listen } from "@tauri-apps/api/event";
 import { Tour } from "./Tour";
 import logoDark from "../assets/skg-logo-dark.png";
 import logoLight from "../assets/skg-logo-light.png";
-import { api, NEWS_SEEN_EVENT, type ElevationStatus, type WhatsNew } from "../lib/api";
+import { api, isTauri, NEWS_SEEN_EVENT, type ElevationStatus, type WhatsNew } from "../lib/api";
 import {
   Activity,
   BatteryCharging,
@@ -20,6 +21,7 @@ import {
   type LucideIcon,
   Gauge,
   CircuitBoard,
+  Settings,
 } from "lucide-react";
 
 const NAV: { group: string; items: { to: string; label: string; icon: LucideIcon; end?: boolean }[] }[] = [
@@ -56,9 +58,29 @@ const NAV: { group: string; items: { to: string; label: string; icon: LucideIcon
       { to: "/correcoes", label: "Correções", icon: Wrench },
     ],
   },
+  {
+    group: "App",
+    items: [{ to: "/configuracoes", label: "Configurações", icon: Settings }],
+  },
 ];
 
+/** Atalhos globais pedem "abrir na tela X": o backend mostra a janela e manda a rota. */
+function useNavigateEvents() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!isTauri()) return;
+    let off: (() => void) | undefined;
+    let alive = true;
+    void listen<string>("navigate", (e) => navigate(e.payload)).then((u) => (alive ? (off = u) : u()));
+    return () => {
+      alive = false;
+      off?.();
+    };
+  }, [navigate]);
+}
+
 export function Layout() {
+  useNavigateEvents();
   return (
     <div className="app">
       <nav className="sidebar" aria-label="Navegação principal">

@@ -769,6 +769,12 @@ a {
   font: inherit;
 }
 
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .chip {
   min-height: 36px;
   padding: 0 14px;
