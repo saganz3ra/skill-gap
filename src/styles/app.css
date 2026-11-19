@@ -60,23 +60,27 @@ a {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 12px 16px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 18px;
-  letter-spacing: -0.01em;
+  padding: 6px 12px 18px;
 }
 
-.brand-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--brand);
-  color: var(--on-brand);
-  display: grid;
-  place-items: center;
+/* Logo SKG: uma versão por tema (no claro, S e G escuros). */
+.brand-logo {
+  height: 34px;
+  width: auto;
+  display: block;
 }
+.brand-logo-light {
+  display: none;
+}
+[data-theme="light"] .brand-logo-dark,
+:root:not([data-theme="dark"]) .brand-logo-dark {
+  display: none;
+}
+[data-theme="light"] .brand-logo-light,
+:root:not([data-theme="dark"]) .brand-logo-light {
+  display: block;
+}
+
 
 .nav-group {
   display: flex;
@@ -87,14 +91,17 @@ a {
 
 .nav-group-label {
   padding: 6px 12px 4px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
 .nav-link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -115,6 +122,18 @@ a {
   background: var(--soft);
   color: var(--text);
   font-weight: 600;
+}
+
+/* Marca da tela ativa: barrinha inclinada como as do logo. */
+.nav-link.active::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 10px;
+  bottom: 10px;
+  width: 4px;
+  background: var(--brand-grad);
+  transform: skewX(-14deg);
 }
 
 .nav-link.active svg {
@@ -198,19 +217,38 @@ a {
 }
 
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.14em;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--accent);
+}
+
+/* Dois traços inclinados antes do rótulo, no ângulo das letras do logo. */
+.eyebrow::before {
+  content: "";
+  width: 14px;
+  height: 5px;
+  margin-right: 12px;
+  background: var(--brand);
+  transform: skewX(-24deg);
+  box-shadow: 19px 0 0 var(--brand);
 }
 
 .page-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 34px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-style: italic;
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
 }
 
 .page-sub {
@@ -230,6 +268,7 @@ a {
   min-height: 44px;
   padding: 0 20px;
   border-radius: var(--radius-sm);
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
   border: 1px solid transparent;
   font-weight: 600;
   cursor: pointer;
@@ -244,12 +283,18 @@ a {
 }
 
 .btn-primary {
-  background: var(--brand);
+  background: var(--brand-grad);
   color: var(--on-brand);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--brand-hover);
+  box-shadow: 0 6px 22px var(--glow);
 }
 
 .btn-ghost {
@@ -293,8 +338,12 @@ a {
 
 .card-title {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .card-head {
@@ -336,9 +385,10 @@ a {
 
 .stat-value {
   font-family: var(--font-display);
-  font-size: 32px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-style: italic;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .stat-link {
@@ -435,7 +485,8 @@ a {
 }
 
 .switch[aria-checked="true"] .switch-track {
-  background: var(--brand);
+  background: var(--brand-grad);
+  box-shadow: 0 0 0 1px var(--soft-border), 0 0 12px var(--glow);
 }
 
 .switch[aria-checked="true"] .switch-knob {
@@ -883,7 +934,7 @@ a {
 .progress > span {
   display: block;
   height: 100%;
-  background: var(--brand);
+  background: var(--brand-grad);
   border-radius: 3px;
   transition: width 0.3s;
 }
@@ -999,8 +1050,9 @@ a.btn-ghost {
 
 .monitor-value {
   font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 700;
+  font-style: italic;
+  font-size: 24px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1287,7 +1339,7 @@ html.overlay-root #root {
 }
 .overlay-fps span {
   font-size: 11px;
-  color: #e5383b;
+  color: #ff3d45;
   letter-spacing: 0.08em;
 }
 .overlay-heat-warn {

@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.3.3",
+    "date": null,
+    "items": [
+      {
+        "kind": "novo",
+        "text": "Nova identidade SKG: logo novo na barra lateral e nos ícones do app (com o K sozinho nos tamanhos pequenos, onde o nome inteiro não se lê)."
+      },
+      {
+        "kind": "melhoria",
+        "text": "Visual no estilo do logo: preto de verdade no tema escuro, vermelho mais vivo, títulos em itálico pesado e detalhes inclinados como as letras do SKG."
+      }
+    ]
+  },
+  {
     "version": "0.3.2",
     "date": "2026-11-19",
     "items": [

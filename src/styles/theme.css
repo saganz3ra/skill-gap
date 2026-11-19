@@ -4,25 +4,25 @@
 */
 :root {
   color-scheme: light;
-  --bg: #fbf7f6;
+  --bg: #f6f6f7;
   --side: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f6efee;
-  --border: #ebe1e0;
-  --text: #1a1416;
-  --muted: #6b6064;
+  --surface-2: #f1f1f3;
+  --border: #e3e3e6;
+  --text: #0b0b0c;
+  --muted: #5c5c63;
   /* vermelho para TEXTO: mais escuro no claro pra passar 4.5:1 */
-  --accent: #c8102e;
+  --accent: #c4000e;
   /* vermelho para FUNDO de botão/chave: texto branco passa 4.5:1 nos dois temas */
-  --brand: #d92638;
-  --brand-hover: #b81f2f;
+  --brand: #df000f;
+  --brand-hover: #b8000c;
   --on-brand: #ffffff;
-  --soft: #fdecee;
-  --soft-border: #f3c4ca;
-  --grid: rgba(26, 20, 22, 0.06);
-  --dot: rgba(26, 20, 22, 0.1);
-  --glow: rgba(217, 38, 56, 0.13);
-  --track-off: #d9cfce;
+  --soft: #fdeced;
+  --soft-border: #f4c0c3;
+  --grid: rgba(10, 10, 12, 0.05);
+  --dot: rgba(10, 10, 12, 0.09);
+  --glow: rgba(223, 0, 15, 0.12);
+  --track-off: #d4d4d8;
   --ok: #1e7a4c;
   --ok-bg: rgba(30, 122, 76, 0.1);
   --warn: #9a5b00;
@@ -32,28 +32,31 @@
   --idle-bg: rgba(107, 96, 100, 0.1);
 
   --font-body: "Inter Variable", system-ui, sans-serif;
-  --font-display: "Space Grotesk", var(--font-body);
+  /* Títulos no estilo do logo SKG: itálico pesado. */
+  --font-display: "Saira", var(--font-body);
+  /* Vermelho do logo: mais claro em cima, mais fundo embaixo (texto branco passa 4.5:1 nos dois). */
+  --brand-grad: linear-gradient(180deg, #e3000f 0%, #b3000b 100%);
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --radius: 14px;
-  --radius-sm: 10px;
+  --radius: 12px;
+  --radius-sm: 8px;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f0d0e;
-  --side: #141113;
-  --surface: #1a1618;
-  --surface-2: #241d20;
-  --border: #2e2629;
-  --text: #f2ecee;
-  --muted: #aba1a5;
-  --accent: #ff5a67;
-  --soft: #2a1519;
-  --soft-border: #5c2830;
-  --grid: rgba(255, 255, 255, 0.05);
-  --dot: rgba(255, 255, 255, 0.08);
-  --glow: rgba(217, 38, 56, 0.22);
-  --track-off: #3b3236;
+  --bg: #050505;
+  --side: #0a0a0b;
+  --surface: #111113;
+  --surface-2: #1a1a1d;
+  --border: #26262b;
+  --text: #f5f5f6;
+  --muted: #a1a1aa;
+  --accent: #ff3d45;
+  --soft: #260a0c;
+  --soft-border: #5c151a;
+  --grid: rgba(255, 255, 255, 0.045);
+  --dot: rgba(255, 255, 255, 0.07);
+  --glow: rgba(230, 0, 15, 0.26);
+  --track-off: #35353b;
   --ok: #5bd69a;
   --ok-bg: rgba(91, 214, 154, 0.12);
   --warn: #f5b547;

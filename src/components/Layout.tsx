@@ -1,6 +1,8 @@
 import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { Tour } from "./Tour";
+import logoDark from "../assets/skg-logo-dark.png";
+import logoLight from "../assets/skg-logo-light.png";
 import { api, NEWS_SEEN_EVENT, type ElevationStatus, type WhatsNew } from "../lib/api";
 import {
   Activity,
@@ -15,7 +17,6 @@ import {
   SlidersHorizontal,
   Trash2,
   Wrench,
-  Zap,
   type LucideIcon,
   Gauge,
   CircuitBoard,
@@ -62,10 +63,8 @@ export function Layout() {
     <div className="app">
       <nav className="sidebar" aria-label="Navegação principal">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <Zap size={16} strokeWidth={2.4} />
-          </span>
-          Skill Gap
+          <img className="brand-logo brand-logo-dark" src={logoDark} alt="Skill Gap" />
+          <img className="brand-logo brand-logo-light" src={logoLight} alt="Skill Gap" />
         </div>
 
         {NAV.map(({ group, items }) => (

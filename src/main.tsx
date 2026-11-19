@@ -2,8 +2,11 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import "@fontsource-variable/inter";
-import "@fontsource/space-grotesk/600.css";
-import "@fontsource/space-grotesk/700.css";
+// Saira: títulos e números no estilo do logo SKG (itálico pesado).
+import "@fontsource/saira/600.css";
+import "@fontsource/saira/700.css";
+import "@fontsource/saira/700-italic.css";
+import "@fontsource/saira/800-italic.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "./styles/theme.css";
