@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { api, errorMessage, heatLevel, type HeatKind, type PresentMonStatus, type RemoteInfo, type Telemetry } from "../lib/api";
+import { listen } from "@tauri-apps/api/event";
+
+import { api, errorMessage, heatLevel, isTauri, type HeatKind, type PresentMonStatus, type RemoteInfo, type Telemetry } from "../lib/api";
 import { Switch } from "./ui";
 
 const n = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "…" : v.toFixed(d));
@@ -70,6 +72,17 @@ export function OverlayCard() {
     void api.remoteStatus().then(setRemote).catch(() => undefined);
   };
   useEffect(refresh, []);
+  // O atalho global também liga/desliga a segunda tela: acompanha.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let off: (() => void) | undefined;
+    let alive = true;
+    void listen("remote-changed", refresh).then((u) => (alive ? (off = u) : u()));
+    return () => {
+      alive = false;
+      off?.();
+    };
+  }, []);
   useEffect(() => {
     // A biblioteca do QR só é baixada quando a segunda tela é ligada.
     if (remote) void import("qrcode").then((m) => m.default.toDataURL(remote.url, { margin: 1, width: 180 })).then(setQr);

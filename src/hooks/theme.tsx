@@ -27,8 +27,11 @@ export function applyTheme(theme: Theme) {
 }
 
 interface ThemeContextValue {
+  /** Tema em uso agora. */
   theme: Theme;
-  toggle: () => void;
+  /** Escolha salva: null = igual ao Windows. */
+  choice: Theme | null;
+  setChoice: (choice: Theme | null) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -56,17 +59,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [theme]);
 
-  const toggle = () => {
-    const next: Theme = theme === "dark" ? "light" : "dark";
+  const choose = (next: Theme | null) => {
     setChoice(next);
     try {
-      localStorage.setItem(STORAGE_KEY, next);
+      if (next) localStorage.setItem(STORAGE_KEY, next);
+      else localStorage.removeItem(STORAGE_KEY);
     } catch {
       // armazenamento indisponível: o tema só não fica salvo
     }
   };
 
-  return <ThemeContext.Provider value={{ theme, toggle }}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={{ theme, choice, setChoice: choose }}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme(): ThemeContextValue {

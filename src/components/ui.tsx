@@ -1,22 +1,5 @@
 import type { ReactNode } from "react";
-import { Info, Moon, Sun } from "lucide-react";
-import { useTheme } from "../hooks/theme";
-
-export function ThemeToggle() {
-  const { theme, toggle } = useTheme();
-  const dark = theme === "dark";
-  return (
-    <button
-      type="button"
-      className="icon-btn"
-      onClick={toggle}
-      aria-label={dark ? "Mudar para modo claro" : "Mudar para modo escuro"}
-      title={dark ? "Modo claro" : "Modo escuro"}
-    >
-      {dark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
-    </button>
-  );
-}
+import { Info } from "lucide-react";
 
 interface PageHeaderProps {
   eyebrow: string;
@@ -34,7 +17,6 @@ export function PageHeader({ eyebrow, title, subtitle, actions }: PageHeaderProp
         {subtitle && <p className="page-sub">{subtitle}</p>}
       </div>
       <div className="header-actions">
-        <ThemeToggle />
         {actions}
       </div>
     </header>

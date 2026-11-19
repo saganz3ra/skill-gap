@@ -15,6 +15,7 @@ mod power;
 mod remote;
 mod restore;
 mod sensors;
+mod settings;
 mod startup;
 mod telemetry;
 mod system;
@@ -576,6 +577,9 @@ async fn hw_nic_set(app: tauri::AppHandle, adapter: String, keyword: String, val
 
 // ---------------- Overlay, FPS e segunda tela ----------------
 
+/// Argumento que o Windows passa quando abre o app na inicialização.
+const AUTOSTART_ARG: &str = "--autostart";
+
 type Frames = Arc<telemetry::presentmon::Frames>;
 struct RemoteSlot(std::sync::Mutex<Option<remote::RemoteServer>>);
 type Sensors = Arc<sensors::SensorsState>;
@@ -647,6 +651,11 @@ async fn telemetry_sample(app: tauri::AppHandle) -> AppResult<Telemetry> {
 /// passar. Não injeta nada no jogo (por isso não aparece em tela cheia EXCLUSIVA).
 #[tauri::command]
 async fn overlay_show(app: tauri::AppHandle, show: bool) -> AppResult<()> {
+    overlay_set(&app, show)
+}
+
+/// Usado pelo botão e pelo atalho global.
+fn overlay_set(app: &tauri::AppHandle, show: bool) -> AppResult<()> {
     let err = |e: tauri::Error| AppError::Helper(e.to_string());
     match (app.get_webview_window("overlay"), show) {
         (Some(w), false) => {
@@ -656,7 +665,7 @@ async fn overlay_show(app: tauri::AppHandle, show: bool) -> AppResult<()> {
             }
         }
         (None, true) => {
-            let w = tauri::WebviewWindowBuilder::new(&app, "overlay", tauri::WebviewUrl::App("index.html".into()))
+            let w = tauri::WebviewWindowBuilder::new(app, "overlay", tauri::WebviewUrl::App("index.html".into()))
                 .title("Skill Gap · overlay")
                 .inner_size(230.0, 136.0)
                 .position(16.0, 16.0)
@@ -720,7 +729,11 @@ async fn pm_permission(app: tauri::AppHandle, add: bool) -> AppResult<()> {
 
 #[tauri::command]
 async fn remote_start(app: tauri::AppHandle) -> AppResult<remote::RemoteInfo> {
-    blocking(move || {
+    blocking(move || remote_on(&app)).await
+}
+
+fn remote_on(app: &tauri::AppHandle) -> AppResult<remote::RemoteInfo> {
+    {
         let slot = app.state::<RemoteSlot>();
         let mut s = slot.0.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(srv) = s.as_ref() {
@@ -732,25 +745,152 @@ async fn remote_start(app: tauri::AppHandle) -> AppResult<remote::RemoteInfo> {
         let info = srv.info.clone();
         *s = Some(srv);
         Ok(info)
-    })
-    .await
+    }
 }
 
 #[tauri::command]
 async fn remote_stop(app: tauri::AppHandle) -> AppResult<()> {
     blocking(move || {
-        app.state::<RemoteSlot>().0.lock().unwrap_or_else(|e| e.into_inner()).take();
-        if app.get_webview_window("overlay").is_none() {
-            telemetry::presentmon::stop();
-        }
+        remote_off(&app);
         Ok(())
     })
     .await
 }
 
+fn remote_off(app: &tauri::AppHandle) {
+    app.state::<RemoteSlot>().0.lock().unwrap_or_else(|e| e.into_inner()).take();
+    if app.get_webview_window("overlay").is_none() {
+        telemetry::presentmon::stop();
+    }
+}
+
 #[tauri::command]
 fn remote_status(app: tauri::AppHandle) -> Option<remote::RemoteInfo> {
     app.state::<RemoteSlot>().0.lock().ok().and_then(|s| s.as_ref().map(|r| r.info.clone()))
+}
+
+// ---------------- Configurações ----------------
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsView {
+    settings: settings::Settings,
+    /// O Windows abre o Skill Gap ao entrar (lido do próprio Windows).
+    autostart: bool,
+    /// Atalhos que o Windows recusou (outro programa já usa a combinação).
+    failed: Vec<settings::ShortcutAction>,
+}
+
+fn settings_view(app: &tauri::AppHandle) -> SettingsView {
+    use tauri_plugin_autostart::ManagerExt;
+    let s = app.state::<settings::SettingsStore>().get();
+    let failed = s.shortcuts.iter().filter(|(_, accel)| !shortcut_registered(app, accel)).map(|(a, _)| *a).collect();
+    SettingsView { autostart: app.autolaunch().is_enabled().unwrap_or(false), settings: s, failed }
+}
+
+fn shortcut_registered(app: &tauri::AppHandle, accel: &str) -> bool {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+    accel.parse::<Shortcut>().is_ok_and(|s| app.global_shortcut().is_registered(s))
+}
+
+#[tauri::command]
+fn settings_get(app: tauri::AppHandle) -> SettingsView {
+    settings_view(&app)
+}
+
+#[tauri::command]
+async fn settings_set_autostart(app: tauri::AppHandle, enabled: bool) -> AppResult<SettingsView> {
+    blocking(move || {
+        use tauri_plugin_autostart::ManagerExt;
+        let al = app.autolaunch();
+        if enabled { al.enable() } else { al.disable() }.map_err(|e| AppError::Helper(e.to_string()))?;
+        Ok(settings_view(&app))
+    })
+    .await
+}
+
+#[tauri::command]
+fn settings_set_start_minimized(app: tauri::AppHandle, enabled: bool) -> AppResult<SettingsView> {
+    app.state::<settings::SettingsStore>().update(|s| {
+        s.start_minimized = enabled;
+        Ok(())
+    })?;
+    Ok(settings_view(&app))
+}
+
+/// Grava e (re)registra o atalho. Se o Windows recusar (outro programa usa a
+/// combinação), o anterior volta e o erro diz o motivo.
+#[tauri::command]
+fn settings_set_shortcut(app: tauri::AppHandle, action: settings::ShortcutAction, accel: Option<String>) -> AppResult<SettingsView> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+    let store = app.state::<settings::SettingsStore>();
+    let old = store.get().shortcuts.get(&action).cloned();
+    let new = accel.as_deref().map(settings::normalize).transpose()?;
+    let gs = app.global_shortcut();
+    if let Some(o) = old.as_deref().and_then(|o| o.parse::<Shortcut>().ok()) {
+        let _ = gs.unregister(o);
+    }
+    if let Some(n) = &new {
+        let sc = n.parse::<Shortcut>().map_err(|e| AppError::InvalidInput(e.to_string()))?;
+        if let Err(e) = gs.register(sc) {
+            if let Some(o) = old.as_deref().and_then(|o| o.parse::<Shortcut>().ok()) {
+                let _ = gs.register(o);
+            }
+            return Err(AppError::InvalidInput(format!("o Windows não aceitou {n}: outro programa já usa essa combinação ({e})")));
+        }
+    }
+    if let Err(e) = store.set_shortcut(action, new.as_deref()) {
+        if let Some(sc) = new.as_deref().and_then(|n| n.parse::<Shortcut>().ok()) {
+            let _ = gs.unregister(sc);
+        }
+        if let Some(o) = old.as_deref().and_then(|o| o.parse::<Shortcut>().ok()) {
+            let _ = gs.register(o);
+        }
+        return Err(e);
+    }
+    Ok(settings_view(&app))
+}
+
+/// Mostra a janela principal (desminimiza e põe na frente) e, se pedido, abre uma tela.
+fn show_main(app: &tauri::AppHandle, route: &str) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+    if !route.is_empty() {
+        let _ = app.emit("navigate", route);
+    }
+}
+
+/// O que cada atalho faz. Roda fora da thread de eventos: abrir o overlay cria uma
+/// janela, e o Modo Jogo grava arquivo.
+fn run_shortcut(app: tauri::AppHandle, action: settings::ShortcutAction) {
+    use settings::ShortcutAction as A;
+    std::thread::spawn(move || match action {
+        A::ToggleOverlay => {
+            let open = app.get_webview_window("overlay").is_some();
+            let _ = overlay_set(&app, !open);
+        }
+        A::ToggleRemote => {
+            let on = app.state::<RemoteSlot>().0.lock().map(|s| s.is_some()).unwrap_or(false);
+            if on {
+                remote_off(&app);
+            } else {
+                let _ = remote_on(&app);
+            }
+            let _ = app.emit("remote-changed", ());
+        }
+        A::ToggleGameMode => {
+            let w = app.state::<Arc<Watcher>>();
+            let mut cfg = w.status().config;
+            cfg.enabled = !cfg.enabled;
+            if w.save(cfg).is_ok() {
+                let _ = app.emit("game-session", w.status());
+            }
+        }
+        other => show_main(&app, other.route().unwrap_or("")),
+    });
 }
 
 // ---------------- Timer ----------------
@@ -1004,6 +1144,22 @@ pub fn run_elevated_helper(args: &[String]) -> i32 {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec![AUTOSTART_ARG])))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    use tauri_plugin_global_shortcut::{Shortcut, ShortcutState};
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    let saved = app.state::<settings::SettingsStore>().get();
+                    let hit = saved.shortcuts.iter().find(|(_, accel)| accel.parse::<Shortcut>().is_ok_and(|s| s.id() == shortcut.id()));
+                    if let Some((action, _)) = hit {
+                        run_shortcut(app.clone(), *action);
+                    }
+                })
+                .build(),
+        )
         .manage(gaming::GamingState::default())
         .manage(monitor::MonitorState::default())
         .manage(system::SystemCache::default())
@@ -1035,6 +1191,25 @@ pub fn run() {
             app.manage(netcfg::NetState::load(dir.join("rede-antes-do-reset.json")));
             app.manage(diagnosis::BaselineState::load(dir.join("linha-de-base.json")));
             app.manage(hardware::HardwareState::load(dir.join("hardware.json")));
+
+            // Configurações: atalhos salvos voltam a valer; um recusado pelo Windows
+            // (combinação tomada por outro programa) aparece como falha na aba.
+            let store = settings::SettingsStore::load(&dir);
+            {
+                use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+                for accel in store.get().shortcuts.values() {
+                    if let Ok(sc) = accel.parse::<Shortcut>() {
+                        let _ = app.global_shortcut().register(sc);
+                    }
+                }
+            }
+            // Aberto pelo Windows ao entrar + "abrir minimizado": começa na barra de tarefas.
+            if store.get().start_minimized && std::env::args().any(|a| a == AUTOSTART_ARG) {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.minimize();
+                }
+            }
+            app.manage(store);
             // Primeira leitura logo ao abrir (antes de o usuário mexer em algo), em segundo plano.
             let handle = app.handle().clone();
             std::thread::spawn(move || {
@@ -1114,6 +1289,10 @@ pub fn run() {
             remote_start,
             remote_stop,
             remote_status,
+            settings_get,
+            settings_set_autostart,
+            settings_set_start_minimized,
+            settings_set_shortcut,
             sensors_read
         ])
         .build(tauri::generate_context!())

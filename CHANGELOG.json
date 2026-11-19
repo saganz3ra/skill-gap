@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.3.4",
+    "date": null,
+    "items": [
+      {
+        "kind": "novo",
+        "text": "Aba Configurações: iniciar com o Windows (e abrir minimizado), tema claro, escuro ou igual ao Windows."
+      },
+      {
+        "kind": "novo",
+        "text": "Atalhos de teclado globais: abrir o app ou uma tela, mostrar o overlay, ligar o Modo Jogo ou a segunda tela, até de dentro do jogo."
+      },
+      {
+        "kind": "mudanca",
+        "text": "O botão de tema saiu do topo das telas e foi para Configurações."
+      }
+    ]
+  },
+  {
     "version": "0.3.3",
     "date": "2026-11-19",
     "items": [
