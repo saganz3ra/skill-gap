@@ -270,9 +270,54 @@ export interface NicProperty {
   display: string[];
 }
 
+export interface GpuStats {
+  name: string;
+  temp: number | null;
+  fanPct: number | null;
+  powerW: number | null;
+  powerLimitW: number | null;
+  clockMhz: number | null;
+  utilPct: number | null;
+  memUsedMb: number | null;
+  memTotalMb: number | null;
+}
+
+export interface Reading {
+  name: string;
+  celsius: number;
+}
+
+export interface Fan {
+  name: string;
+  rpm: number | null;
+  pct: number | null;
+}
+
+export interface Sensors {
+  gpu: GpuStats | null;
+  cpuTemp: number | null;
+  /** "lhm" = sensor do processador; "acpi" = aproximada. */
+  cpuSource: "lhm" | "acpi" | null;
+  board: Reading[];
+  disks: Reading[];
+  fans: Fan[];
+  lhm: boolean;
+  disksNeedAdmin: boolean;
+}
+
+export type HeatKind = "cpu" | "gpu" | "disk" | "board";
+const HEAT_LIMITS: Record<HeatKind, [number, number]> = { cpu: [80, 90], gpu: [80, 87], disk: [60, 70], board: [60, 75] };
+
+/** Faixa da temperatura: o mesmo critério na tela, no overlay e no celular. */
+export function heatLevel(kind: HeatKind, c: number | null | undefined): "ok" | "warn" | "crit" | null {
+  if (c === null || c === undefined) return null;
+  const [warn, crit] = HEAT_LIMITS[kind];
+  return c >= crit ? "crit" : c >= warn ? "warn" : "ok";
+}
+
 export interface Telemetry {
   sample: MonitorSample | null;
-  gpuTemp: number | null;
+  sensors: Sensors;
   ping: { lastMs: number | null; avgMs: number | null; jitterMs: number | null; lossPct: number; target: number[] };
   frames: { fps: number; frametimeMs: number; varMs: number } | null;
   game: string | null;
@@ -363,8 +408,6 @@ export interface MonitorSample {
   diskWrite: number;
   netDown: number;
   netUp: number;
-  /** Zona térmica ACPI mais quente, °C (aproximada). */
-  cpuTemp: number | null;
 }
 
 export interface HardwareInfo {
@@ -523,6 +566,7 @@ export const api = {
   remoteStart: () => invoke<RemoteInfo>("remote_start"),
   remoteStop: () => invoke<void>("remote_stop"),
   remoteStatus: () => invoke<RemoteInfo | null>("remote_status"),
+  sensorsRead: () => invoke<Sensors>("sensors_read"),
   /** [dispositivos, InstanceIds com valor anotado pelo app] */
   hwMsiList: () => invoke<[MsiDevice[], string[]]>("hw_msi_list"),
   hwMsiSet: (instanceId: string, enabled: boolean) => invoke<void>("hw_msi_set", { instanceId, enabled }),

@@ -71,14 +71,10 @@ impl PingState {
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use windows::{echo, gpu_temp};
+pub use windows::echo;
 
 #[cfg(not(windows))]
 pub fn echo(_t: [u8; 4]) -> Option<f64> {
-    None
-}
-#[cfg(not(windows))]
-pub fn gpu_temp() -> Option<f64> {
     None
 }
 

@@ -224,6 +224,7 @@ fn execute(req: Request, mut progress: impl FnMut(serde_json::Value)) -> AppResu
         Request::PowerSetting { plan, sub, setting, value } => unit(WinSys.set_power_value(&plan, &sub, &setting, value)),
         Request::TaskEnabled { path, enabled } => unit(WinSys.set_task_enabled(&path, enabled)),
         Request::PageCombining { enabled } => unit(WinSys.set_page_combining(enabled)),
+        Request::DiskTemps => Ok(serde_json::to_value(crate::sensors::disks()?).unwrap_or_default()),
         Request::PerfLogGroup { sid, add } => unit(crate::telemetry::presentmon::set_perf_group(&sid, add)),
         Request::AppxManifest { name } => crate::apps::provisioned_manifest(&name).map(serde_json::Value::String),
         Request::MsiWrite { instance_id, value } => unit(crate::hardware::msi_write(&instance_id, value)),

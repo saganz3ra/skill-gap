@@ -1,10 +1,22 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 
-import { api, errorMessage, type PresentMonStatus, type RemoteInfo, type Telemetry } from "../lib/api";
+import { api, errorMessage, heatLevel, type HeatKind, type PresentMonStatus, type RemoteInfo, type Telemetry } from "../lib/api";
 import { Switch } from "./ui";
 
 const n = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? "…" : v.toFixed(d));
+
+/** " · 62°" colorido pela faixa (amarelo atenção, vermelho crítico). */
+function Temp({ kind, c, approx }: { kind: HeatKind; c: number | null | undefined; approx?: boolean }) {
+  if (c === null || c === undefined) return null;
+  return (
+    <span className={`overlay-heat-${heatLevel(kind, c)}`}>
+      {" · "}
+      {approx ? "~" : ""}
+      {c.toFixed(0)}°
+    </span>
+  );
+}
 
 /** Janela do overlay: transparente, clique passa direto. Lê 1×/s enquanto aberta. */
 export function OverlayWindow() {
@@ -34,8 +46,9 @@ export function OverlayWindow() {
         {t?.frames ? `${n(t.frames.frametimeMs, 1)} ms · var ${n(t.frames.varMs, 1)}` : t?.game ? "medindo…" : "sem jogo do Modo Jogo"}
       </div>
       <div className="overlay-row">
-        CPU {n(s?.cpu)}%{s?.cpuTemp ? ` · ~${n(s.cpuTemp)}°` : ""} · GPU {s?.gpu === null || s?.gpu === undefined ? "n/d" : `${n(s.gpu)}%`}
-        {t?.gpuTemp ? ` · ${n(t.gpuTemp)}°` : ""}
+        CPU {n(s?.cpu)}%<Temp kind="cpu" c={t?.sensors.cpuTemp} approx={t?.sensors.cpuSource === "acpi"} /> · GPU{" "}
+        {s?.gpu === null || s?.gpu === undefined ? "n/d" : `${n(s.gpu)}%`}
+        <Temp kind="gpu" c={t?.sensors.gpu?.temp} />
       </div>
       <div className="overlay-row">
         Ping {n(t?.ping.lastMs)} ms · jit {n(t?.ping.jitterMs, 1)} · perda {n(t?.ping.lossPct)}%

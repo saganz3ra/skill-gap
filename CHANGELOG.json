@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.3.2",
+    "date": null,
+    "items": [
+      {
+        "kind": "novo",
+        "text": "Temperaturas e ventoinhas no Monitor e na segunda tela do celular: GPU (temperatura, ventoinha, consumo, clock e VRAM), SSD/HD e, com o LibreHardwareMonitor aberto, a temperatura real do processador, a placa-mãe e o RPM das ventoinhas."
+      },
+      {
+        "kind": "novo",
+        "text": "Alerta por cor quando um componente esquenta demais, igual no PC, no overlay e no celular, com gráfico dos últimos 2 minutos de CPU e GPU."
+      },
+      {
+        "kind": "novo",
+        "text": "Guia de como controlar as ventoinhas (BIOS, FanControl ou o painel da placa de vídeo). O Skill Gap não instala driver para isso."
+      }
+    ]
+  },
+  {
     "version": "0.3.1",
     "date": "2026-11-17",
     "items": [

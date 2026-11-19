@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, errorMessage, type MonitorSample } from "../lib/api";
 import { formatBytes, formatRate } from "../lib/format";
 import { OverlayCard } from "../components/Overlay";
+import { SensorsCard } from "../components/Sensors";
 import { useResource } from "../hooks/useResource";
 import { PageHeader } from "../components/ui";
 import { LiveChart } from "../components/LiveChart";
@@ -48,6 +49,7 @@ export function Monitor() {
     <>
       <PageHeader eyebrow="Geral" title="Monitor" subtitle="CPU, memória, GPU, disco e rede ao vivo, nos últimos 60 segundos." />
       {error ? <div className="error-box">Não foi possível ler os contadores: {errorMessage(error)}</div> : null}
+      <SensorsCard />
       <OverlayCard />
 
       <section className="card monitor-card" aria-labelledby="m-cpu">
