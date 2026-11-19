@@ -7,9 +7,9 @@
 <title>Skill Gap · segunda tela</title>
 <style>
   :root { color-scheme: dark; }
-  body { margin: 0; font-family: system-ui, sans-serif; background: #0e0d0d; color: #f2eeee; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #050505; color: #f2eeee; }
   header { padding: 14px 16px; font-weight: 600; border-bottom: 1px solid #2a2626; }
-  header span { color: #e5383b; }
+  header span { color: #ff3d45; }
   main { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
   .t { background: #181515; border: 1px solid #2a2626; border-radius: 12px; padding: 12px; min-width: 0; }
   .l { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #a39b9b; }
@@ -65,7 +65,7 @@
     ctx.strokeStyle = "#2a2626"; ctx.setLineDash([4, 4]); ctx.lineWidth = 1; // linha de "atenção"
     const yw = h - ((LIMITS[kind][0] - lo) / (hi - lo)) * h;
     ctx.beginPath(); ctx.moveTo(0, yw); ctx.lineTo(w, yw); ctx.stroke(); ctx.setLineDash([]);
-    ctx.strokeStyle = "#e5383b"; ctx.lineWidth = 3; ctx.lineJoin = "round";
+    ctx.strokeStyle = "#ff3d45"; ctx.lineWidth = 3; ctx.lineJoin = "round";
     ctx.beginPath();
     data.forEach((v, i) => {
       if (v === null) return;
