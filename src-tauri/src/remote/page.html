@@ -11,11 +11,20 @@
   header { padding: 14px 16px; font-weight: 600; border-bottom: 1px solid #2a2626; }
   header span { color: #e5383b; }
   main { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
-  .t { background: #181515; border: 1px solid #2a2626; border-radius: 12px; padding: 12px; }
+  .t { background: #181515; border: 1px solid #2a2626; border-radius: 12px; padding: 12px; min-width: 0; }
   .l { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #a39b9b; }
   .v { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 4px; }
   .s { font-size: 12px; color: #a39b9b; margin-top: 2px; }
   .wide { grid-column: 1 / -1; }
+  .warn { color: #f5c542; }
+  .crit { color: #ff5a5f; }
+  .t.warn { border-color: #6b5a1e; }
+  .t.crit { border-color: #7a2326; }
+  canvas { width: 100%; height: 36px; display: block; margin-top: 8px; }
+  .h { grid-column: 1 / -1; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #a39b9b; margin: 8px 2px 0; }
+  .row { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid #241f1f; font-size: 14px; }
+  .row:first-of-type { border-top: 0; }
+  .row b { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
   #st { font-size: 12px; color: #a39b9b; padding: 0 16px 16px; }
 </style>
 </head>
@@ -23,33 +32,98 @@
 <header><span>Skill Gap</span> · segunda tela</header>
 <main>
   <div class="t wide"><div class="l">FPS</div><div class="v" id="fps">…</div><div class="s" id="ft">abra um jogo da lista do Modo Jogo</div></div>
-  <div class="t"><div class="l">CPU</div><div class="v" id="cpu">…</div><div class="s" id="ct"></div></div>
-  <div class="t"><div class="l">GPU</div><div class="v" id="gpu">…</div><div class="s" id="gt"></div></div>
+  <div class="t"><div class="l">CPU</div><div class="v" id="cpu">…</div><div class="s" id="cpuu"></div></div>
+  <div class="t"><div class="l">GPU</div><div class="v" id="gpu">…</div><div class="s" id="gpuu"></div></div>
   <div class="t"><div class="l">Ping</div><div class="v" id="ping">…</div><div class="s" id="jit"></div></div>
   <div class="t"><div class="l">RAM</div><div class="v" id="ram">…</div><div class="s" id="ramt"></div></div>
+
+  <div class="h">Temperaturas</div>
+  <div class="t" id="tc"><div class="l">Processador</div><div class="v" id="ctemp">…</div><div class="s" id="csrc"></div><canvas id="cch" width="300" height="72"></canvas></div>
+  <div class="t" id="tg"><div class="l">Placa de vídeo</div><div class="v" id="gtemp">…</div><div class="s" id="gsub"></div><canvas id="gch" width="300" height="72"></canvas></div>
+  <div class="t wide" id="others"></div>
+
+  <div class="h">Ventoinhas</div>
+  <div class="t wide" id="fans"></div>
 </main>
 <div id="st">Conectando…</div>
 <script>
   const $ = (id) => document.getElementById(id);
   const n = (v, d = 0) => (v === null || v === undefined ? "…" : Number(v).toFixed(d));
+  // Mesmos limites da tela do PC (src/lib/api.ts, heatLevel).
+  const LIMITS = { cpu: [80, 90], gpu: [80, 87], disk: [60, 70], board: [60, 75] };
+  const level = (k, c) => (c === null || c === undefined ? "" : c >= LIMITS[k][1] ? "crit" : c >= LIMITS[k][0] ? "warn" : "");
+  const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+  const hist = { c: [], g: [] }; // últimos 2 minutos (1 ponto/s)
+
+  function spark(canvas, data, kind) {
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    const pts = data.filter((v) => v !== null);
+    if (pts.length < 2) return;
+    const lo = Math.min(...pts) - 2, hi = Math.max(...pts, LIMITS[kind][0]) + 2;
+    ctx.strokeStyle = "#2a2626"; ctx.setLineDash([4, 4]); ctx.lineWidth = 1; // linha de "atenção"
+    const yw = h - ((LIMITS[kind][0] - lo) / (hi - lo)) * h;
+    ctx.beginPath(); ctx.moveTo(0, yw); ctx.lineTo(w, yw); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = "#e5383b"; ctx.lineWidth = 3; ctx.lineJoin = "round";
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      if (v === null) return;
+      const x = (i / 119) * w, y = h - ((v - lo) / (hi - lo)) * h;
+      i === 0 || data[i - 1] === null ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+  function push(arr, v) { arr.push(v === undefined ? null : v); if (arr.length > 120) arr.shift(); }
+  function tile(el, kind, c) { el.classList.remove("warn", "crit"); const l = level(kind, c); if (l) el.classList.add(l); }
+  function rows(list) { return list.map(([name, value, cls]) => `<div class="row"><span>${esc(name)}</span><b class="${cls || ""}">${value}</b></div>`).join(""); }
+
   const es = new EventSource("events");
   es.onopen = () => ($("st").textContent = "Ao vivo · 1 leitura por segundo");
   es.onerror = () => ($("st").textContent = "Sem conexão com o PC (a segunda tela foi desligada?)");
   es.onmessage = (e) => {
     const d = JSON.parse(e.data);
     const s = d.sample || {};
+    const z = d.sensors || {};
+    const g = z.gpu || null;
     if (d.frames) {
       $("fps").textContent = n(d.frames.fps);
       $("ft").textContent = n(d.frames.frametimeMs, 2) + " ms · var " + n(d.frames.varMs, 2) + " ms" + (d.game ? " · " + d.game : "");
     }
     $("cpu").textContent = n(s.cpu) + "%";
-    $("ct").textContent = s.cpuTemp ? "~" + n(s.cpuTemp) + " °C (aproximada)" : "";
     $("gpu").textContent = s.gpu === null || s.gpu === undefined ? "n/d" : n(s.gpu) + "%";
-    $("gt").textContent = d.gpuTemp ? n(d.gpuTemp) + " °C" : "";
+    $("gpuu").textContent = g && g.powerW !== null ? n(g.powerW) + " W" + (g.clockMhz ? " · " + n(g.clockMhz) + " MHz" : "") : "";
     $("ping").textContent = d.ping && d.ping.lastMs !== null ? n(d.ping.lastMs) + " ms" : "…";
     $("jit").textContent = d.ping ? "jitter " + n(d.ping.jitterMs, 1) + " ms · perda " + n(d.ping.lossPct) + "%" : "";
     $("ram").textContent = s.ramTotal ? n((s.ramUsed / s.ramTotal) * 100) + "%" : "…";
     $("ramt").textContent = s.ramUsed ? n(s.ramUsed / 1073741824, 1) + " GB" : "";
+
+    // Temperaturas
+    const ct = z.cpuTemp;
+    $("ctemp").textContent = ct === null || ct === undefined ? "n/d" : (z.cpuSource === "acpi" ? "~" : "") + n(ct) + " °C";
+    $("csrc").textContent = z.cpuSource === "lhm" ? "sensor do processador" : z.cpuSource === "acpi" ? "aproximada (Windows)" : "abra o LibreHardwareMonitor no PC";
+    tile($("tc"), "cpu", ct);
+    push(hist.c, ct); spark($("cch"), hist.c, "cpu");
+
+    const gt = g ? g.temp : null;
+    $("gtemp").textContent = gt === null || gt === undefined ? "n/d" : n(gt) + " °C";
+    $("gsub").textContent = g ? (g.memUsedMb !== null && g.memTotalMb ? "VRAM " + n(g.memUsedMb / 1024, 1) + "/" + n(g.memTotalMb / 1024) + " GB" : "") : "só placas NVIDIA";
+    tile($("tg"), "gpu", gt);
+    push(hist.g, gt); spark($("gch"), hist.g, "gpu");
+
+    const others = [
+      ...(z.disks || []).map((r) => [r.name, n(r.celsius) + " °C", level("disk", r.celsius)]),
+      ...(z.board || []).map((r) => [r.name, n(r.celsius) + " °C", level("board", r.celsius)]),
+    ];
+    if (!others.length && z.disksNeedAdmin) others.push(["SSD/HD", "precisa do auxiliar aberto no PC", ""]);
+    $("others").innerHTML = rows(others);
+    $("others").style.display = others.length ? "" : "none";
+
+    const fans = [];
+    if (g && g.fanPct !== null) fans.push(["Placa de vídeo", g.fanPct === 0 ? "parada (silenciosa)" : n(g.fanPct) + "%"]);
+    (z.fans || []).forEach((f) => fans.push([f.name, [f.rpm !== null ? n(f.rpm) + " RPM" : "", f.pct !== null ? n(f.pct) + "%" : ""].filter(Boolean).join(" · ")]));
+    if (!z.lhm) fans.push(["Placa-mãe", "abra o LibreHardwareMonitor no PC"]);
+    $("fans").innerHTML = rows(fans);
   };
 </script>
 </body>

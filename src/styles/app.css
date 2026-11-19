@@ -1290,6 +1290,13 @@ html.overlay-root #root {
   color: #e5383b;
   letter-spacing: 0.08em;
 }
+.overlay-heat-warn {
+  color: #f5c542;
+}
+.overlay-heat-crit {
+  color: #ff5a5f;
+  font-weight: 700;
+}
 .overlay-sub,
 .overlay-row {
   color: #cfc7c7;

@@ -49,6 +49,8 @@ pub enum Request {
     PageCombining { enabled: bool },
     /// Põe/tira o usuário (SID) do grupo "Usuários de log de desempenho" (para o PresentMon).
     PerfLogGroup { sid: String, add: bool },
+    /// Lê a temperatura dos discos (Get-StorageReliabilityCounter exige admin). Só leitura.
+    DiskTemps,
     /// Só LÊ onde está a cópia provisionada de um app da lista curada.
     AppxManifest { name: String },
     /// `MSISupported` de um dispositivo PCI (o auxiliar confere na listagem atual).
@@ -175,6 +177,7 @@ pub fn check(req: &Request) -> Result<(), String> {
         }
         Request::TaskEnabled { path, .. } => task_allowed(all_ops(), path),
         Request::PageCombining { .. } => true,
+        Request::DiskTemps => true,
         Request::PerfLogGroup { sid, .. } => sid.starts_with("S-1-5-21-") && sid.len() < 100 && sid.chars().all(|c| c.is_ascii_digit() || c == '-' || c == 'S'),
         Request::AppxManifest { name } => crate::apps::find(name).is_some(),
         Request::MsiWrite { instance_id, value } => crate::hardware::is_pci_instance(instance_id) && matches!(value, None | Some(0) | Some(1)),

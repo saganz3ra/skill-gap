@@ -14,6 +14,7 @@ mod news;
 mod power;
 mod remote;
 mod restore;
+mod sensors;
 mod startup;
 mod telemetry;
 mod system;
@@ -553,13 +554,42 @@ async fn hw_nic_set(app: tauri::AppHandle, adapter: String, keyword: String, val
 
 type Frames = Arc<telemetry::presentmon::Frames>;
 struct RemoteSlot(std::sync::Mutex<Option<remote::RemoteServer>>);
-struct GpuTempCache(std::sync::Mutex<(Option<std::time::Instant>, Option<f64>)>);
+type Sensors = Arc<sensors::SensorsState>;
+
+/// Uma leitura completa dos sensores (roda numa thread, a cada `sensors::REFRESH`).
+/// SSD/HD: direto se o app for admin; pelo auxiliar só se ele JÁ estiver aberto
+/// (o celular pedindo dados nunca pode fazer surgir um UAC na tela do PC).
+fn read_sensors(acpi_cpu: Option<f64>) -> sensors::Sensors {
+    let disks = if system::is_admin() {
+        sensors::disks().ok()
+    } else if elevation::is_running() {
+        elevation::call(&elevation::Request::DiskTemps, elevation::Launch::IfRunning, |_| {})
+            .ok()
+            .and_then(|v| serde_json::from_value(v).ok())
+    } else {
+        None
+    };
+    sensors::combine(sensors::gpu(), sensors::lhm(), acpi_cpu, disks)
+}
+
+fn sensors_now(app: &tauri::AppHandle, acpi_cpu: Option<f64>) -> sensors::Sensors {
+    app.state::<Sensors>().get(move || read_sensors(acpi_cpu))
+}
+
+#[tauri::command]
+async fn sensors_read(app: tauri::AppHandle) -> AppResult<sensors::Sensors> {
+    blocking(move || {
+        let acpi = monitor::sample(&app.state::<monitor::MonitorState>()).ok().and_then(|s| s.cpu_temp);
+        Ok(sensors_now(&app, acpi))
+    })
+    .await
+}
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Telemetry {
     sample: Option<monitor::Sample>,
-    gpu_temp: Option<f64>,
+    sensors: sensors::Sensors,
     ping: telemetry::PingStats,
     frames: Option<telemetry::presentmon::FrameStats>,
     game: Option<String>,
@@ -570,14 +600,7 @@ struct Telemetry {
 fn telemetry_snapshot(app: &tauri::AppHandle) -> Telemetry {
     let sample = monitor::sample(&app.state::<monitor::MonitorState>()).ok();
     let ping = app.state::<telemetry::PingState>().tick(telemetry::echo);
-    let gpu_temp = {
-        let cache = app.state::<GpuTempCache>();
-        let mut c = cache.0.lock().unwrap_or_else(|e| e.into_inner());
-        if c.0.is_none_or(|t| t.elapsed().as_secs() >= 5) {
-            *c = (Some(std::time::Instant::now()), telemetry::gpu_temp());
-        }
-        c.1
-    };
+    let sensors = sensors_now(app, sample.as_ref().and_then(|s| s.cpu_temp));
     let game = app.state::<Arc<Watcher>>().status().session.map(|s| s.game.exe);
     let frames = app.state::<Frames>().inner().clone();
     let can = system::is_admin() || telemetry::presentmon::in_perf_group();
@@ -588,7 +611,7 @@ fn telemetry_snapshot(app: &tauri::AppHandle) -> Telemetry {
         _ => telemetry::presentmon::stop(),
     }
     let frames = telemetry::presentmon::capturing().and_then(|_| frames.stats());
-    Telemetry { sample, gpu_temp, ping, frames, game }
+    Telemetry { sample, sensors, ping, frames, game }
 }
 
 #[tauri::command]
@@ -963,7 +986,7 @@ pub fn run() {
         .manage(telemetry::PingState::default())
         .manage(Frames::default())
         .manage(RemoteSlot(std::sync::Mutex::new(None)))
-        .manage(GpuTempCache(std::sync::Mutex::new((None, None))))
+        .manage(Sensors::default())
         .manage(FixLock(AtomicBool::new(false)))
         .setup(|app| {
             // Configs e diários em %APPDATA%\app.skillgap.desktop\
@@ -1065,7 +1088,8 @@ pub fn run() {
             pm_permission,
             remote_start,
             remote_stop,
-            remote_status
+            remote_status,
+            sensors_read
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Skill Gap");

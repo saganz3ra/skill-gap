@@ -36,18 +36,3 @@ pub fn echo(target: [u8; 4]) -> Option<f64> {
         (r.Status == 0).then_some(r.RoundTripTime as f64)
     }
 }
-
-/// `nvidia-smi` instalado pelo driver (System32). Outras GPUs: None.
-pub fn gpu_temp() -> Option<f64> {
-    let root = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
-    let exe = format!(r"{root}\System32\nvidia-smi.exe");
-    if !std::path::Path::new(&exe).is_file() {
-        return None;
-    }
-    let out = Command::new(exe)
-        .args(["--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .ok()?;
-    String::from_utf8_lossy(&out.stdout).lines().next()?.trim().parse().ok()
-}
